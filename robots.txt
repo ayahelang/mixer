@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /admin.html
+Disallow: /auth.html
+
+Sitemap: https://mixer.silverhawk.web.id/sitemap.xml

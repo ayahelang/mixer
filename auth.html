@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Masuk — Silverhawk Audio Mixer</title>
+  <meta name="robots" content="noindex">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/layout.css">
+  <link rel="stylesheet" href="css/gallery.css">
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <a class="brand" href="index.html" style="text-decoration:none;color:inherit">
+        <div class="logo">🎛</div>
+        <div><strong>Akun</strong><span>Google atau nama + password</span></div>
+      </a>
+    </header>
+    <div class="panel auth-box">
+      <h1>Masuk / Daftar</h1>
+      <p>Google OAuth lewat Supabase, atau akun lokal (nama + password) via Edge Function — password tidak disimpan di frontend.</p>
+      <button type="button" class="btn btn-primary" id="btnGoogle" style="width:100%;margin-bottom:14px">Lanjut dengan Google</button>
+      <div class="tabs">
+        <button type="button" class="btn active" data-tab="login">Masuk</button>
+        <button type="button" class="btn" data-tab="reg">Daftar</button>
+      </div>
+      <div id="tabLogin">
+        <div class="field"><label>Nama</label><input id="loginName" autocomplete="username"></div>
+        <div class="field"><label>Password</label><input id="loginPass" type="password" autocomplete="current-password"></div>
+        <button type="button" class="btn btn-primary" id="btnLogin" style="width:100%">Masuk</button>
+      </div>
+      <div id="tabReg" hidden>
+        <div class="field"><label>Nama tampilan</label><input id="regName" autocomplete="nickname"></div>
+        <div class="field"><label>Password</label><input id="regPass" type="password" autocomplete="new-password"></div>
+        <button type="button" class="btn btn-primary" id="btnReg" style="width:100%">Daftar</button>
+      </div>
+    </div>
+  </main>
+  <div class="toast"></div>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/config.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/ui.js"></script>
+  <script>
+    MixerUI.initTheme();
+    document.querySelectorAll("[data-tab]").forEach(function (b) {
+      b.onclick = function () {
+        document.querySelectorAll("[data-tab]").forEach(function (x) {
+          x.classList.toggle("active", x === b);
+        });
+        document.getElementById("tabLogin").hidden = b.getAttribute("data-tab") !== "login";
+        document.getElementById("tabReg").hidden = b.getAttribute("data-tab") !== "reg";
+      };
+    });
+    document.getElementById("btnGoogle").onclick = async function () {
+      try {
+        await MixerAuth.loginGoogle();
+      } catch (e) {
+        MixerUI.toast(e.message || String(e));
+      }
+    };
+    document.getElementById("btnLogin").onclick = async function () {
+      try {
+        await MixerAuth.loginLocal(
+          document.getElementById("loginName").value,
+          document.getElementById("loginPass").value
+        );
+        MixerUI.toast("Berhasil masuk");
+        location.href = "index.html";
+      } catch (e) {
+        MixerUI.toast(e.message || String(e));
+      }
+    };
+    document.getElementById("btnReg").onclick = async function () {
+      try {
+        await MixerAuth.registerLocal(
+          document.getElementById("regName").value,
+          document.getElementById("regPass").value
+        );
+        MixerUI.toast("Terdaftar — silakan masuk");
+      } catch (e) {
+        MixerUI.toast(e.message || String(e));
+      }
+    };
+  </script>
+</body>
+</html>

@@ -1,1 +1,106 @@
-coming soon
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Silverhawk Audio Mixer — Rekam, Mix & Showcase</title>
+  <meta name="description" content="Multi-track audio mixer di browser. Rekam, mix hingga 8 track, dan showcase karya di galeri Silverhawk. Like, komentar, dan berbagi.">
+  <meta name="theme-color" content="#0b6cf0">
+  <link rel="canonical" href="https://mixer.silverhawk.web.id/">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Silverhawk Audio Mixer">
+  <meta property="og:description" content="Rekam, mix, dan showcase audio multi-track di browser.">
+  <meta property="og:url" content="https://mixer.silverhawk.web.id/">
+  <meta property="og:image" content="https://mixer.silverhawk.web.id/assets/og-image.svg">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="manifest" href="site.webmanifest">
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/layout.css">
+  <link rel="stylesheet" href="css/gallery.css">
+  <link rel="stylesheet" href="css/audio-mixer-amx.css">
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <a class="brand" href="index.html" style="text-decoration:none;color:inherit">
+        <div class="logo" aria-hidden="true">🎛</div>
+        <div><strong>Silverhawk Audio Mixer</strong><span>Record · Mix · Showcase</span></div>
+      </a>
+      <nav class="nav" aria-label="Utama">
+        <a href="gallery.html">Galeri</a>
+        <a href="studio.html">Studio</a>
+        <span id="authSlot"></span>
+        <button type="button" class="icon-btn" id="themeBtn" title="Tema" aria-label="Ganti tema">☾</button>
+      </nav>
+    </header>
+
+    <section class="hero">
+      <div>
+        <p class="eyebrow">SILVERHAWK AUDIO</p>
+        <h1>Mix di browser.<br><span>Showcase</span> ke dunia.</h1>
+        <p class="sub">Multi-track mixer ringan untuk rekaman vokal, overdub, harmoni, dan export. Publikasikan karya — pengunjung bisa putar, like, dan komentar.</p>
+        <div class="hero-cta">
+          <button type="button" class="btn btn-primary" id="btnOpenMixer">Buka Mixer</button>
+          <a class="btn" href="studio.html">Studio penuh</a>
+          <a class="btn btn-ghost" href="gallery.html">Lihat galeri</a>
+        </div>
+      </div>
+      <div class="status-card">
+        <span>ROADMAP</span>
+        <b>8 → 12</b>
+        <small>Track · template instrument & melody segera hadir</small>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-head">
+        <div>
+          <h2>Showcase terbaru</h2>
+          <p>Karya publik dari komunitas Silverhawk</p>
+        </div>
+        <a class="btn" href="gallery.html">Semua</a>
+      </div>
+      <div class="grid-cards" id="galleryGrid"></div>
+    </section>
+
+    <section class="panel" style="margin-top:28px">
+      <div class="section-head" style="margin-top:0">
+        <div>
+          <h2>Kenapa di sini?</h2>
+          <p>Fokus ke alur kreatif yang cepat di HP dan desktop</p>
+        </div>
+      </div>
+      <div class="grid-cards">
+        <div class="panel" style="box-shadow:none;margin:0">
+          <h3 style="margin:0 0 6px;font-size:15px">Mixer pro di browser</h3>
+          <p style="margin:0;color:var(--muted);font-size:13px">Peak meter, Mark In/Out, harmoni pitch, balance, undo/redo — tanpa install.</p>
+        </div>
+        <div class="panel" style="box-shadow:none;margin:0">
+          <h3 style="margin:0 0 6px;font-size:15px">Galeri sosial</h3>
+          <p style="margin:0;color:var(--muted);font-size:13px">Like & komentar. Daftar dengan Google atau nama + password.</p>
+        </div>
+        <div class="panel" style="box-shadow:none;margin:0">
+          <h3 style="margin:0 0 6px;font-size:15px">Satu ekosistem Silverhawk</h3>
+          <p style="margin:0;color:var(--muted);font-size:13px">Database bersama Web Gallery (Supabase). Siap berkembang ke 12 channel & template.</p>
+        </div>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <span>© Silverhawk · mixer.silverhawk.web.id</span>
+      <span><a href="https://xylophone.silverhawk.web.id">Xylophone</a> · <a href="https://gallery.silverhawk.web.id">Gallery</a></span>
+    </footer>
+  </main>
+  <div class="toast" role="status"></div>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/config.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/gallery.js"></script>
+  <script src="js/audio-mixer.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

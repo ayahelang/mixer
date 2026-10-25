@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Studio — Silverhawk Audio Mixer</title>
+  <meta name="description" content="Studio multi-track: rekam mic, upload, mix, export WAV/MP3/WebM, dan unggah ke showcase.">
+  <meta name="theme-color" content="#0b6cf0">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/layout.css">
+  <link rel="stylesheet" href="css/gallery.css">
+  <link rel="stylesheet" href="css/audio-mixer-amx.css">
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <a class="brand" href="index.html" style="text-decoration:none;color:inherit">
+        <div class="logo">🎛</div>
+        <div><strong>Studio</strong><span>Max 8 track · roadmap 12</span></div>
+      </a>
+      <nav class="nav">
+        <a href="gallery.html">Galeri</a>
+        <span id="authSlot"></span>
+        <button type="button" class="icon-btn" id="themeBtn">☾</button>
+      </nav>
+    </header>
+    <section class="panel">
+      <h1 style="margin:0 0 8px;font-size:22px">Audio Mixer Studio</h1>
+      <p style="margin:0 0 16px;color:var(--muted);font-size:14px">Rekam, overdub, atur Mark In/Out, harmoni, lalu export. Login untuk mengunggah ke showcase publik.</p>
+      <div style="display:flex;flex-wrap:wrap;gap:10px">
+        <button type="button" class="btn btn-primary" id="btnOpenMixer">Buka panel Mixer</button>
+        <a class="btn" href="auth.html">Login / Daftar</a>
+      </div>
+      <p style="margin:16px 0 0;font-size:12px;color:var(--muted)">Shortcut: Space = play/pause · tahan Space = stop</p>
+    </section>
+    <footer class="footer"><span>© Silverhawk</span></footer>
+  </main>
+  <div class="toast"></div>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/config.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/audio-mixer.js"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", async function () {
+      MixerUI.initTheme();
+      document.getElementById("themeBtn").onclick = MixerUI.toggleTheme;
+      await MixerUI.renderAuthSlot();
+      document.getElementById("btnOpenMixer").onclick = function () {
+        if (!window.SHAudioMixer) {
+          MixerUI.toast("Modul mixer belum termuat");
+          return;
+        }
+        SHAudioMixer.open({
+          onExport: function (blob) {
+            MixerUI.toast("Export siap · " + Math.round(blob.size / 1024) + " KB");
+          },
+        });
+      };
+    });
+  </script>
+</body>
+</html>

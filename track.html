@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Track — Silverhawk Audio Mixer</title>
+  <meta name="theme-color" content="#0b6cf0">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/layout.css">
+  <link rel="stylesheet" href="css/gallery.css">
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <a class="brand" href="gallery.html" style="text-decoration:none;color:inherit">
+        <div class="logo">🎛</div>
+        <div><strong id="trackTitle">Track</strong><span id="trackMeta">—</span></div>
+      </a>
+      <nav class="nav">
+        <a href="gallery.html">Galeri</a>
+        <span id="authSlot"></span>
+        <button type="button" class="icon-btn" id="themeBtn">☾</button>
+      </nav>
+    </header>
+    <section class="panel">
+      <div id="playerBox" class="empty">Memuat…</div>
+      <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+        <button type="button" class="btn btn-primary" id="btnLike">♥ Like</button>
+        <span class="badge" id="likeCount">0</span>
+      </div>
+    </section>
+    <section class="panel" style="margin-top:14px">
+      <h2 style="margin:0 0 12px;font-size:16px">Komentar</h2>
+      <div id="comments"></div>
+      <div class="field" style="margin-top:12px">
+        <label>Tulis komentar</label>
+        <input id="commentBody" placeholder="Bagikan apresiasi…">
+      </div>
+      <button type="button" class="btn btn-primary" id="btnComment">Kirim</button>
+    </section>
+  </main>
+  <div class="toast"></div>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/config.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/ui.js"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", async function () {
+      MixerUI.initTheme();
+      document.getElementById("themeBtn").onclick = MixerUI.toggleTheme;
+      await MixerUI.renderAuthSlot();
+      var id = new URLSearchParams(location.search).get("id");
+      if (!id) {
+        document.getElementById("playerBox").textContent = "ID track tidak ada.";
+        return;
+      }
+      try {
+        var mix = await MixerAPI.getMix(id);
+        if (!mix) throw new Error("Track tidak ditemukan");
+        document.getElementById("trackTitle").textContent = mix.title || "Track";
+        document.getElementById("trackMeta").textContent =
+          (mix.author_name || "Anonim") + " · " + MixerUI.fmtDur(mix.duration_ms);
+        document.getElementById("likeCount").textContent = String(mix.likes_count || 0);
+        document.getElementById("playerBox").innerHTML = mix.audio_url
+          ? '<audio controls src="' + MixerUI.escapeHtml(mix.audio_url) + '" style="width:100%"></audio>'
+          : "Tidak ada file audio.";
+        document.title = (mix.title || "Track") + " — Silverhawk Audio Mixer";
+
+        async function loadComments() {
+          var list = await MixerAPI.listComments(id);
+          var box = document.getElementById("comments");
+          if (!list.length) {
+            box.innerHTML = '<p class="empty" style="padding:12px">Belum ada komentar.</p>';
+            return;
+          }
+          box.innerHTML = list
+            .map(function (c) {
+              return (
+                '<div class="comment"><strong>' +
+                MixerUI.escapeHtml(c.author_name || "User") +
+                "</strong><p>" +
+                MixerUI.escapeHtml(c.body) +
+                "</p></div>"
+              );
+            })
+            .join("");
+        }
+        await loadComments();
+
+        document.getElementById("btnLike").onclick = async function () {
+          try {
+            var sess = await MixerAuth.session();
+            var token = sess && (sess.access_token || (sess.user && sess.user.id));
+            var r = await MixerAPI.edge("like", { track_id: id }, token);
+            if (r.likes_count != null)
+              document.getElementById("likeCount").textContent = String(r.likes_count);
+            MixerUI.toast("Thanks!");
+          } catch (e) {
+            MixerUI.toast(e.message || String(e));
+          }
+        };
+        document.getElementById("btnComment").onclick = async function () {
+          try {
+            var body = document.getElementById("commentBody").value.trim();
+            if (!body) return;
+            var sess = await MixerAuth.session();
+            var token = sess && sess.access_token;
+            await MixerAPI.edge(
+              "comment",
+              { track_id: id, body: body, author_name: (sess && sess.user && (sess.user.name || sess.user.email)) || "Tamu" },
+              token
+            );
+            document.getElementById("commentBody").value = "";
+            await loadComments();
+            MixerUI.toast("Komentar terkirim");
+          } catch (e) {
+            MixerUI.toast(e.message || String(e));
+          }
+        };
+      } catch (e) {
+        document.getElementById("playerBox").textContent = e.message || String(e);
+      }
+    });
+  </script>
+</body>
+</html>

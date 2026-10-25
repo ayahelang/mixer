@@ -1,0 +1,17 @@
+{
+  "name": "Silverhawk Audio Mixer",
+  "short_name": "SH Mixer",
+  "description": "Rekam, mix, dan showcase audio multi-track",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f4f7fb",
+  "theme_color": "#0b6cf0",
+  "icons": [
+    {
+      "src": "assets/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
