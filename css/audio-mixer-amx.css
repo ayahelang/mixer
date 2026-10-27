@@ -1705,3 +1705,12 @@ input.amx-region-time{
   line-height:1.35;
 }
 .amx-yt-head{flex-wrap:wrap}
+
+
+/* Loop + FX */
+.amx-track-acts .is-loop,
+.amx-xs.is-loop{
+  color:#7dffb0!important;
+  border-color:rgba(61,220,132,.5)!important;
+  font-weight:800!important;
+}

@@ -105,16 +105,31 @@
     return new Blob([buffer], { type: "audio/wav" });
   }
 
-  /** Impulse response sederhana untuk reverb (tanpa file eksternal) */
+  /**
+   * Impulse reverb halus (gaya DAW ringan / BandLab-ish):
+   * noise terseleksi + decay eksponensial + fade ujung → minim gresekan saat multi-track.
+   */
   function makeImpulse(ctx, seconds, decay) {
     var rate = ctx.sampleRate;
-    var len = Math.floor(rate * (seconds || 1.8));
+    var sec = seconds || 1.35;
+    var len = Math.max(256, Math.floor(rate * sec));
     var impulse = ctx.createBuffer(2, len, rate);
-    decay = decay || 2.2;
+    decay = decay || 3.2;
     for (var c = 0; c < 2; c++) {
       var data = impulse.getChannelData(c);
+      var prev = 0;
       for (var i = 0; i < len; i++) {
-        data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decay);
+        // noise + one-pole lowpass ringan (kurangi hiss/gresekan)
+        var n = Math.random() * 2 - 1;
+        prev = prev * 0.92 + n * 0.08;
+        var env = Math.pow(1 - i / len, decay);
+        // fade-in 3ms cegah klik di awal IR
+        var fadeIn = Math.min(1, i / (rate * 0.003));
+        data[i] = prev * env * fadeIn * (c === 0 ? 1 : 0.96);
+      }
+      // seed stereo sedikit beda
+      if (c === 0) {
+        for (var j = 0; j < Math.min(64, len); j++) data[j] *= 0.85 + (j / 64) * 0.15;
       }
     }
     return impulse;
@@ -731,15 +746,55 @@
       return audioCtx;
     }
 
+    var reverbBus = null;
+    var reverbComp = null;
+    var delayNode = null;
+    var delayFeedback = null;
+    var delayWet = null;
+    var delayBus = null;
+
     function ensureReverb() {
       ensureCtx();
       if (!sharedConvolver) {
         sharedConvolver = audioCtx.createConvolver();
-        sharedImpulse = makeImpulse(audioCtx, 1.6, 2.4);
+        sharedImpulse = makeImpulse(audioCtx, 1.35, 3.2);
         sharedConvolver.buffer = sharedImpulse;
-        sharedConvolver.connect(ensureMasterGain());
+        // Bus send → convolver → soft compressor → master (hindari stack gresekan)
+        reverbBus = audioCtx.createGain();
+        reverbBus.gain.value = 1;
+        reverbComp = audioCtx.createDynamicsCompressor();
+        try {
+          reverbComp.threshold.value = -18;
+          reverbComp.knee.value = 18;
+          reverbComp.ratio.value = 3;
+          reverbComp.attack.value = 0.003;
+          reverbComp.release.value = 0.15;
+        } catch (e) {}
+        reverbBus.connect(sharedConvolver);
+        sharedConvolver.connect(reverbComp);
+        reverbComp.connect(ensureMasterGain());
       }
       return sharedConvolver;
+    }
+
+    function ensureDelay() {
+      ensureCtx();
+      if (!delayNode) {
+        delayNode = audioCtx.createDelay(1.0);
+        delayNode.delayTime.value = 0.28;
+        delayFeedback = audioCtx.createGain();
+        delayFeedback.gain.value = 0.28;
+        delayWet = audioCtx.createGain();
+        delayWet.gain.value = 1;
+        delayBus = audioCtx.createGain();
+        delayBus.gain.value = 1;
+        delayBus.connect(delayNode);
+        delayNode.connect(delayWet);
+        delayWet.connect(ensureMasterGain());
+        delayNode.connect(delayFeedback);
+        delayFeedback.connect(delayNode);
+      }
+      return delayBus;
     }
 
     function setStatus(t) {
@@ -762,6 +817,9 @@
           balance: typeof tr.balance === "number" ? tr.balance : 0,
           trimIn: typeof tr.trimIn === "number" ? tr.trimIn : 0,
           trimOut: tr.trimOut == null ? null : tr.trimOut,
+          loop: !!tr.loop,
+          delay: typeof tr.delay === "number" ? tr.delay : 0,
+          tone: typeof tr.tone === "number" ? tr.tone : 0.5,
         };
       });
     }
@@ -788,6 +846,9 @@
         balance: typeof src.balance === "number" ? src.balance : 0,
         trimIn: typeof src.trimIn === "number" ? src.trimIn : 0,
         trimOut: src.trimOut == null ? null : src.trimOut,
+        loop: !!src.loop,
+        delay: typeof src.delay === "number" ? src.delay : 0,
+        tone: typeof src.tone === "number" ? src.tone : 0.5,
       };
       tracks.splice(i + 1, 0, copy);
       renderTracks();
@@ -819,6 +880,9 @@
           balance: s.balance,
           trimIn: s.trimIn,
           trimOut: s.trimOut,
+          loop: !!s.loop,
+          delay: typeof s.delay === "number" ? s.delay : 0,
+          tone: typeof s.tone === "number" ? s.tone : 0.5,
         };
       });
       historySuspended = false;
@@ -896,6 +960,7 @@
 
     function maxDur() {
       var m = 0;
+      var loopMin = 0;
       tracks.forEach(function (t) {
         if (t.type === "youtube") {
           var yd = typeof t.ytDuration === "number" ? t.ytDuration : 0;
@@ -904,10 +969,17 @@
           return;
         }
         if (!t.buffer) return;
-        var end = (t.offset || 0) + trackActiveDur(t);
-        if (end > m) m = end;
+        var ad = trackActiveDur(t);
+        var end = (t.offset || 0) + ad;
+        if (t.loop) {
+          // track loop: minimal 4x region atau 30s agar ada ruang loop
+          var loopEnd = (t.offset || 0) + Math.max(ad * 4, 30);
+          if (loopEnd > loopMin) loopMin = loopEnd;
+        } else if (end > m) {
+          m = end;
+        }
       });
-      return m;
+      return Math.max(m, loopMin);
     }
 
     function getYtDock() {
@@ -986,6 +1058,9 @@
         offset: Math.max(0, off > 0.05 ? off : 0),
         volume: 1,
         reverb: 0,
+        loop: false,
+        delay: 0,
+        tone: 0.5,
         ytDuration: 0,
       });
       ytTrackIdx = tracks.length - 1;
@@ -1829,20 +1904,37 @@
       return typeof tr.volume === "number" ? tr.volume : 1;
     }
 
-    /** Hubungkan buffer source dengan gain + reverb send → master */
+    /** Hubungkan buffer source: tone → vol → pan → dry/master + send reverb/delay */
     function connectTrackLive(src, tr) {
       ensureCtx();
       var dest = ensureMasterGain();
       var vol = effectiveTrackVol(tr);
       var rev = typeof tr.reverb === "number" ? tr.reverb : 0;
+      var dly = typeof tr.delay === "number" ? tr.delay : 0;
+      var tone = typeof tr.tone === "number" ? tr.tone : 0.5; // 0 gelap .. 1 terang
       var semi = typeof tr.semitones === "number" ? tr.semitones : 0;
       var bal = typeof tr.balance === "number" ? tr.balance : 0;
       try {
         src.detune.value = semi * 100;
       } catch (e) {}
+
+      // Tone = lowpass (performa aman, 1 biquad/track)
+      var toneNode = null;
+      try {
+        toneNode = audioCtx.createBiquadFilter();
+        toneNode.type = "lowpass";
+        // 400Hz .. 18kHz
+        var hz = 400 * Math.pow(18000 / 400, Math.max(0, Math.min(1, tone)));
+        toneNode.frequency.value = hz;
+        toneNode.Q.value = 0.7;
+        src.connect(toneNode);
+      } catch (e) {}
+      var head = toneNode || src;
+
       var dry = audioCtx.createGain();
       dry.gain.value = vol;
-      src.connect(dry);
+      head.connect(dry);
+
       var panNode = null;
       try {
         panNode = audioCtx.createStereoPanner();
@@ -1852,24 +1944,38 @@
       } catch (e) {
         dry.connect(dest);
       }
+
+      // Reverb send ke bus bersama (bukan stack convolver per-track)
       var wetGain = null;
       ensureReverb();
       wetGain = audioCtx.createGain();
-      wetGain.gain.value = vol * rev;
-      src.connect(wetGain);
-      try {
-        if (panNode) {
-          var wetPan = audioCtx.createStereoPanner();
-          wetPan.pan.value = Math.max(-1, Math.min(1, bal));
-          wetGain.connect(wetPan);
-          wetPan.connect(sharedConvolver);
-          panNode._wetPan = wetPan;
-        } else {
-          wetGain.connect(sharedConvolver);
-        }
-      } catch (e2) {
-        wetGain.connect(sharedConvolver);
+      // kurangi wet sedikit saat banyak track (anti gresekan)
+      var nAct = 0;
+      for (var ti = 0; ti < tracks.length; ti++) {
+        if (isTrackActive(tracks[ti]) && (tracks[ti].reverb || 0) > 0.02) nAct++;
       }
+      var wetScale = nAct > 1 ? 1 / Math.sqrt(nAct) : 1;
+      wetGain.gain.value = vol * rev * 0.85 * wetScale;
+      head.connect(wetGain);
+      try {
+        if (reverbBus) wetGain.connect(reverbBus);
+        else wetGain.connect(sharedConvolver);
+      } catch (e2) {
+        try {
+          wetGain.connect(sharedConvolver);
+        } catch (e3) {}
+      }
+
+      // Delay send bersama (echo ringan)
+      var dlyGain = null;
+      if (dly > 0.01) {
+        ensureDelay();
+        dlyGain = audioCtx.createGain();
+        dlyGain.gain.value = vol * dly * 0.7;
+        head.connect(dlyGain);
+        dlyGain.connect(delayBus);
+      }
+
       var trkAn = null;
       try {
         trkAn = audioCtx.createAnalyser();
@@ -1880,28 +1986,40 @@
       liveGains.push({
         dry: dry,
         wet: wetGain,
+        dly: dlyGain,
+        tone: toneNode,
         track: tr,
         src: src,
         analyser: trkAn,
         pan: panNode,
-        wetPan: panNode && panNode._wetPan,
       });
     }
 
     function applyLiveVolumes() {
+      var nRev = 0;
+      liveGains.forEach(function (g) {
+        if (g.track && (g.track.reverb || 0) > 0.02) nRev++;
+      });
+      var wetScale = nRev > 1 ? 1 / Math.sqrt(nRev) : 1;
       liveGains.forEach(function (g) {
         if (!g.track) return;
         var vol = effectiveTrackVol(g.track);
         var rev = typeof g.track.reverb === "number" ? g.track.reverb : 0;
+        var dly = typeof g.track.delay === "number" ? g.track.delay : 0;
+        var tone = typeof g.track.tone === "number" ? g.track.tone : 0.5;
         var semi = typeof g.track.semitones === "number" ? g.track.semitones : 0;
         var bal = typeof g.track.balance === "number" ? g.track.balance : 0;
         bal = Math.max(-1, Math.min(1, bal));
         try {
           if (g.dry) g.dry.gain.value = vol;
-          if (g.wet) g.wet.gain.value = vol * rev;
+          if (g.wet) g.wet.gain.value = vol * rev * 0.85 * wetScale;
+          if (g.dly) g.dly.gain.value = vol * dly * 0.7;
+          if (g.tone) {
+            g.tone.frequency.value =
+              400 * Math.pow(18000 / 400, Math.max(0, Math.min(1, tone)));
+          }
           if (g.src && g.src.detune) g.src.detune.value = semi * 100;
           if (g.pan) g.pan.pan.value = bal;
-          if (g.wetPan) g.wetPan.pan.value = bal;
         } catch (e) {}
       });
       if (masterGainNode) {
@@ -1912,33 +2030,56 @@
     }
 
     function scheduleTrack(tr, head, t0) {
-      // Model DAW:
-      //  - Start (offset) = posisi clip di timeline utama
-      //  - Mark In = 0:00 konten audio (buffer[trimIn] terdengar di mixTime=offset)
-      //  - Clip aktif di timeline: [offset, offset + (trimOut-trimIn)]
+      // Model DAW + loop:
+      //  - Start (offset) = posisi clip di timeline
+      //  - Mark In/Out = region buffer yang di-loop bila tr.loop
       if (!tr || !tr.buffer) return null;
       var off = tr.offset || 0;
       var tIn = trackTrimIn(tr);
       var tOut = trackTrimOut(tr);
-      var activeDur = tOut - tIn;
+      var activeDur = Math.max(0.05, tOut - tIn);
+      var looping = !!tr.loop;
       var trackStart = off;
-      var trackEnd = off + activeDur;
+      // loop: clip berlanjut sampai maxDur timeline
+      var timelineEnd = maxDur();
+      var trackEnd = looping
+        ? Math.max(off + activeDur, timelineEnd)
+        : off + activeDur;
       if (head >= trackEnd - 0.001) return null;
       var when = t0;
       var offsetInBuffer = tIn;
       if (head > trackStart) {
-        offsetInBuffer = tIn + (head - off);
-        when = t0;
+        if (looping) {
+          var into = head - off;
+          var pos = into % activeDur;
+          offsetInBuffer = tIn + pos;
+          when = t0;
+        } else {
+          offsetInBuffer = tIn + (head - off);
+          when = t0;
+        }
       } else {
         when = t0 + (trackStart - head);
         offsetInBuffer = tIn;
       }
       if (offsetInBuffer < tIn) offsetInBuffer = tIn;
-      if (offsetInBuffer >= tOut - 0.001) return null;
-      var remaining = tOut - offsetInBuffer;
+      if (!looping && offsetInBuffer >= tOut - 0.001) return null;
+      var remaining;
+      if (looping) {
+        remaining = Math.max(0.05, trackEnd - Math.max(head, off));
+      } else {
+        remaining = tOut - offsetInBuffer;
+      }
       if (remaining <= 0.001) return null;
       var src = audioCtx.createBufferSource();
       src.buffer = tr.buffer;
+      if (looping && activeDur > 0.05) {
+        try {
+          src.loop = true;
+          src.loopStart = tIn;
+          src.loopEnd = tOut;
+        } catch (eL) {}
+      }
       connectTrackLive(src, tr);
       try {
         src.start(when, offsetInBuffer, remaining);
@@ -2029,6 +2170,8 @@
           offSec > 0.05 ? " @" + fmt(offSec) : "";
         var vol = typeof tr.volume === "number" ? tr.volume : 1;
         var rev = typeof tr.reverb === "number" ? tr.reverb : 0;
+        var dly = typeof tr.delay === "number" ? tr.delay : 0;
+        var tone = typeof tr.tone === "number" ? tr.tone : 0.5;
         var semi = typeof tr.semitones === "number" ? tr.semitones : 0;
         var bal = typeof tr.balance === "number" ? tr.balance : 0;
         // Slider max: at least timeline length, current offset, 60s
@@ -2092,6 +2235,13 @@
           (tr.muted ? "Unmute" : "Mute") +
           '">' +
           (tr.muted ? "M●" : "M") +
+          "</button>" +
+          '<button type="button" class="btn btn-ghost amx-xs' +
+          (tr.loop ? " is-loop" : "") +
+          '" data-act="loop" data-i="' +
+          idx +
+          '" title="Loop region (Mark In–Out) berulang sampai akhir timeline">' +
+          (tr.loop ? "⟳●" : "⟳") +
           "</button>" +
           '<button type="button" class="btn btn-ghost amx-xs amx-trk-play' +
           (soloPlayIdx === idx && isPlaying ? " is-playing" : "") +
@@ -2209,7 +2359,7 @@
           '" data-act="off" data-i="' +
           idx +
           '"></label>' +
-          '<label class="amx-slider-lab" title="Reverb">Rev <input type="range" min="0" max="100" value="' +
+          '<label class="amx-slider-lab" title="Reverb (bus bersama, anti gresekan)">Rev <input type="range" min="0" max="100" value="' +
           Math.round(rev * 100) +
           '" data-act="rev" data-i="' +
           idx +
@@ -2217,6 +2367,24 @@
           idx +
           '">' +
           Math.round(rev * 100) +
+          "%</span></label>" +
+          '<label class="amx-slider-lab" title="Delay / echo ringan">Dly <input type="range" min="0" max="100" value="' +
+          Math.round(dly * 100) +
+          '" data-act="dly" data-i="' +
+          idx +
+          '"><span data-amx-dlyval="' +
+          idx +
+          '">' +
+          Math.round(dly * 100) +
+          "%</span></label>" +
+          '<label class="amx-slider-lab" title="Tone: gelap ← → terang">Tone <input type="range" min="0" max="100" value="' +
+          Math.round(tone * 100) +
+          '" data-act="tone" data-i="' +
+          idx +
+          '"><span data-amx-toneval="' +
+          idx +
+          '">' +
+          Math.round(tone * 100) +
           "%</span></label>" +
           "</div>" +
           '<div class="amx-track-col-r">' +
@@ -2283,6 +2451,9 @@
         balance: 0,
         trimIn: 0,
         trimOut: null,
+        loop: false,
+        delay: 0,
+        tone: 0.5,
       });
       renderTracks();
       return true;
@@ -2549,39 +2720,80 @@
       master.gain.value = masterGain;
       master.connect(offline.destination);
       var conv = null;
+      var revBus = null;
       if (!opts.mono && tail > 0.2) {
-        var impulse = makeImpulse(offline, 1.4, 2.4);
+        var impulse = makeImpulse(offline, 1.35, 3.2);
         conv = offline.createConvolver();
         conv.buffer = impulse;
-        conv.connect(master);
+        revBus = offline.createGain();
+        var revComp = offline.createDynamicsCompressor();
+        try {
+          revComp.threshold.value = -18;
+          revComp.knee.value = 18;
+          revComp.ratio.value = 3;
+          revComp.attack.value = 0.003;
+          revComp.release.value = 0.15;
+        } catch (eC) {}
+        revBus.connect(conv);
+        conv.connect(revComp);
+        revComp.connect(master);
       }
+      var nRev = 0;
+      active.forEach(function (t) {
+        if ((t.reverb || 0) > 0.02) nRev++;
+      });
+      var wetScale = nRev > 1 ? 1 / Math.sqrt(nRev) : 1;
 
       active.forEach(function (t) {
         var off = t.offset || 0;
         var tIn = trackTrimIn(t);
         var tOut = trackTrimOut(t);
-        var activeDur = tOut - tIn;
-        // clip di timeline: [offset, offset+activeDur]
+        var activeDur = Math.max(0.05, tOut - tIn);
+        var looping = !!t.loop;
         var trackStart = off;
-        var trackEnd = off + activeDur;
+        var trackEnd = looping ? end : off + activeDur;
         var playStart = Math.max(trackStart, start);
         var playEnd = Math.min(trackEnd, end);
         if (playEnd - playStart < 0.01) return;
         var when = playStart - start;
-        var offsetInBuffer = tIn + (playStart - off);
+        var offsetInBuffer;
+        if (looping) {
+          var into = Math.max(0, playStart - off);
+          offsetInBuffer = tIn + (into % activeDur);
+        } else {
+          offsetInBuffer = tIn + (playStart - off);
+        }
         var len = playEnd - playStart;
         var src = offline.createBufferSource();
         src.buffer = t.buffer;
+        if (looping) {
+          try {
+            src.loop = true;
+            src.loopStart = tIn;
+            src.loopEnd = tOut;
+          } catch (eL) {}
+        }
         var vol = typeof t.volume === "number" ? t.volume : 1;
         var rev = typeof t.reverb === "number" ? t.reverb : 0;
+        var tone = typeof t.tone === "number" ? t.tone : 0.5;
         var semi = typeof t.semitones === "number" ? t.semitones : 0;
         try {
           src.detune.value = semi * 100;
         } catch (e) {}
         var bal = typeof t.balance === "number" ? t.balance : 0;
+        var head = src;
+        try {
+          var toneN = offline.createBiquadFilter();
+          toneN.type = "lowpass";
+          toneN.frequency.value =
+            400 * Math.pow(18000 / 400, Math.max(0, Math.min(1, tone)));
+          toneN.Q.value = 0.7;
+          src.connect(toneN);
+          head = toneN;
+        } catch (eT) {}
         var dry = offline.createGain();
         dry.gain.value = vol;
-        src.connect(dry);
+        head.connect(dry);
         try {
           var panO = offline.createStereoPanner();
           panO.pan.value = Math.max(-1, Math.min(1, bal));
@@ -2590,11 +2802,11 @@
         } catch (e3) {
           dry.connect(master);
         }
-        if (conv && rev > 0.01) {
+        if (conv && revBus && rev > 0.01) {
           var wet = offline.createGain();
-          wet.gain.value = vol * rev;
-          src.connect(wet);
-          wet.connect(conv);
+          wet.gain.value = vol * rev * 0.85 * wetScale;
+          head.connect(wet);
+          wet.connect(revBus);
         }
         try {
           src.start(when, offsetInBuffer, len);
@@ -3187,6 +3399,21 @@
           applyLiveVolumes();
           renderTracks();
         }
+      } else if (act === "loop") {
+        var li = Number(t.getAttribute("data-i"));
+        if (tracks[li] && tracks[li].buffer) {
+          pushHistory();
+          tracks[li].loop = !tracks[li].loop;
+          renderTracks();
+          updateTransportUI();
+          if (isPlaying && !isRecording) {
+            var headL = currentPlayhead();
+            stopPlayback(true);
+            playhead = headL;
+            playAll();
+          }
+          setStatus("T" + (li + 1) + (tracks[li].loop ? " loop ON" : " loop OFF"));
+        }
       } else if (act === "solo") {
         var si = Number(t.getAttribute("data-i"));
         if (tracks[si]) {
@@ -3699,13 +3926,27 @@
         var lab2 = root.querySelector('[data-amx-revval="' + i + '"]');
         if (lab2) lab2.textContent = Math.round(tracks[i].reverb * 100) + "%";
         applyLiveVolumes();
-        // jika reverb baru diaktifkan saat play, live graph mungkin belum punya wet — restart play
         if (isPlaying && !isRecording && tracks[i].reverb > 0.01) {
           var head = currentPlayhead();
           stopPlayback(true);
           playhead = head;
           playAll();
         }
+      } else if (act === "dly") {
+        tracks[i].delay = Number(t.value) / 100;
+        var labD = root.querySelector('[data-amx-dlyval="' + i + '"]');
+        if (labD) labD.textContent = Math.round(tracks[i].delay * 100) + "%";
+        if (isPlaying && !isRecording) {
+          var headD = currentPlayhead();
+          stopPlayback(true);
+          playhead = headD;
+          playAll();
+        } else applyLiveVolumes();
+      } else if (act === "tone") {
+        tracks[i].tone = Number(t.value) / 100;
+        var labT = root.querySelector('[data-amx-toneval="' + i + '"]');
+        if (labT) labT.textContent = Math.round(tracks[i].tone * 100) + "%";
+        applyLiveVolumes();
       } else if (act === "off") {
         applyOffset(i, Number(t.value), {
           fromRange: true,
