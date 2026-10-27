@@ -2,11 +2,9 @@
 <html lang="id">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <title>Studio — Silverhawk Audio Mixer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Studio · Silverhawk Audio Mixer</title>
   <meta name="description" content="Studio multi-track: rekam mic, upload, mix, export WAV/MP3/WebM, dan unggah ke showcase.">
-  <meta name="theme-color" content="#0b6cf0">
-  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="css/tokens.css">
   <link rel="stylesheet" href="css/base.css">
   <link rel="stylesheet" href="css/layout.css">
@@ -28,10 +26,11 @@
     </header>
     <section class="panel">
       <h1 style="margin:0 0 8px;font-size:22px">Audio Mixer Studio</h1>
-      <p style="margin:0 0 16px;color:var(--muted);font-size:14px">Rekam, overdub, atur Mark In/Out, harmoni, lalu export. Login untuk mengunggah ke showcase publik.</p>
+      <p style="margin:0 0 16px;color:var(--muted);font-size:14px">Rekam, overdub, atur Mark In/Out, harmoni, lalu kirim ke showcase publik.</p>
       <div style="display:flex;flex-wrap:wrap;gap:10px">
         <button type="button" class="btn btn-primary" id="btnOpenMixer">Buka panel Mixer</button>
         <a class="btn" href="auth.html">Login / Daftar</a>
+        <a class="btn" href="gallery.html">Lihat Showcase</a>
       </div>
       <p style="margin:16px 0 0;font-size:12px;color:var(--muted)">Shortcut: Space = play/pause · tahan Space = stop</p>
     </section>
@@ -50,20 +49,45 @@
       MixerUI.initTheme();
       document.getElementById("themeBtn").onclick = MixerUI.toggleTheme;
       await MixerUI.renderAuthSlot();
+
       document.getElementById("btnOpenMixer").onclick = function () {
         if (!window.SHAudioMixer) {
           MixerUI.toast("Modul mixer belum termuat");
           return;
         }
+        if (!MixerAPI.enabled()) {
+          MixerUI.toast("Isi js/config.js (Supabase) dulu agar showcase aktif");
+        }
         SHAudioMixer.open({
           context: "showcase",
-          onExport: function (blob, meta) {
-            var size = (blob && blob.size) || (meta && meta.blob && meta.blob.size) || 0;
-            MixerUI.toast(
-              "Mix siap untuk showcase · " +
-                Math.round(size / 1024) +
-                " KB. Login lalu unggah ke galeri publik."
+          onExport: async function (blob, meta) {
+            if (!blob || !blob.size) throw new Error("Mix kosong");
+            if (!MixerAPI.enabled()) {
+              throw new Error("Supabase belum dikonfigurasi di js/config.js");
+            }
+            var title = window.prompt(
+              "Judul karya di showcase:",
+              "Mix " + new Date().toLocaleString("id-ID")
             );
+            if (title == null) throw new Error("Dibatalkan");
+            title = String(title).trim() || "Tanpa judul";
+            MixerUI.toast("Mengunggah ke showcase…");
+            var published = await MixerAPI.publishMix(blob, meta, {
+              title: title,
+            });
+            MixerUI.toast("Tayang di showcase: " + (published.title || title));
+            // buka halaman track jika ada id
+            if (published && published.id) {
+              setTimeout(function () {
+                if (confirm("Karya sudah di showcase. Buka halaman track?")) {
+                  location.href =
+                    "track.html?id=" + encodeURIComponent(published.id);
+                } else {
+                  // refresh galeri di tab baru opsional
+                }
+              }, 400);
+            }
+            return published;
           },
         });
       };

@@ -2992,7 +2992,11 @@
         );
         // onExport(blob, meta) — kompatibel callback lama yang hanya terima blob
         await onExport(result.blob, result);
-        setStatus("Siap showcase · " + Math.round(result.blob.size / 1024) + " KB");
+        setStatus(
+          "Sudah di-share ke showcase · " +
+            Math.round(result.blob.size / 1024) +
+            " KB"
+        );
         close();
       } catch (e) {
         var msg = (e && e.message) || String(e);

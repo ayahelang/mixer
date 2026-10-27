@@ -1,26 +1,29 @@
-Silverhawk Mixer — patch v10
-============================
-js/audio-mixer.js
-js/vendor/lame.min.js
-css/audio-mixer-amx.css
-studio.html
+Silverhawk Mixer — patch v13 (Showcase benar-benar publish)
+==========================================================
+Salin ke root repo ayahelang/mixer:
 
-YouTube & export
-----------------
-Browser MELARANG membaca audio mentah dari iframe YouTube (CORS).
-Tidak ada cara 100% otomatis murni-client tanpa izin user.
+  js/audio-mixer.js
+  js/api.js                 ← publishMix + upload Storage
+  js/vendor/lame.min.js
+  css/audio-mixer-amx.css
+  studio.html               ← onExport benar-benar unggah
+  supabase/storage_mixer_audio.sql  ← policy bucket (sekali)
 
-Solusi yang diimplementasikan (viable di Chrome/Edge):
-  1. Sematkan video (▶ YT) — guide lirik, sinkron transport
-  2. Klik "⏺ Ambil audio YT"
-  3. Dialog sistem: pilih tab ini + centang "Bagikan audio tab"
-  4. Video diputar dari awal sambil direkam → decode jadi track
-  5. Track audio itu IKUT mix / WAV / MP3 / WebM / Showcase
+Alur tombol Showcase
+--------------------
+1. Mix region → MP3 mono
+2. Prompt judul
+3. Upload ke Storage bucket "mixer-audio"
+4. Edge action "publish" → baris mixer_tracks (is_public)
+5. Muncul di gallery.html setelah refresh
 
-Alur karaoke yang disarankan
-----------------------------
-  Ambil audio YT → rekam vokal (● Rekam) → atur vol → export / Showcase
+Jika list tetap kosong
+----------------------
+• Pastikan js/config.js terisi supabaseUrl + supabaseAnonKey
+• Jalankan SQL: supabase/storage_mixer_audio.sql
+• Edge Function mixer-api sudah di-deploy
+• Tabel mixer_tracks (migration 001) sudah dijalankan
+• Cek Console browser jika upload/policy error
 
-WAV / MP3 / WebM / Showcase
----------------------------
-  Sama seperti v9 (lamejs lokal + CDN fallback).
+Login tidak wajib untuk publish (author "Anonim"),
+tapi disarankan agar nama penulis tampil.
