@@ -584,10 +584,10 @@
       '  <div class="amx-yt-dock" data-amx="ytdock" hidden>' +
       '    <div class="amx-yt-head">' +
       '      <span class="amx-yt-title" data-amx="yttitle">YouTube</span>' +
-      '      <button type="button" class="btn amx-xs amx-yt-capture" data-amx="yt-capture" title="Rekam audio tab/sistem saat video diputar — hasil jadi track yang ikut export">⏺ Ambil audio YT</button>' +
+      '      <button type="button" class="btn amx-xs amx-yt-capture" data-amx="yt-capture" title="Rekam audio YouTube (tab) + vokal mic BERSAMAAN → 2 track sinkron, ikut export">⏺ YT + Vokal</button>' +
       '      <button type="button" class="btn btn-ghost amx-xs" data-amx="yt-remove" title="Lepas video YouTube">✕</button>' +
       "    </div>" +
-      '    <p class="muted amx-yt-hint">Video = guide lirik. Agar ikut <b>export</b>: klik ⏺ Ambil audio YT (bagikan tab ini + centang audio), lalu rekam vokal.</p>' +
+      '    <p class="muted amx-yt-hint">Klik <b>⏺ YT + Vokal</b>: rekam audio tab YT + mic bersamaan (2 track). Headset disarankan.</p>' +
       '    <div class="amx-yt-frame-wrap"><div id="amxYtPlayer" class="amx-yt-player"></div></div>' +
       "  </div>" +
       '  <div class="amx-transport">' +
@@ -1058,14 +1058,36 @@
 
     var ytCapturing = false;
 
+    function pickRecorderMime() {
+      var mime = "";
+      try {
+        if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus"))
+          mime = "audio/webm;codecs=opus";
+        else if (MediaRecorder.isTypeSupported("audio/webm")) mime = "audio/webm";
+      } catch (e) {}
+      return mime;
+    }
+
+    function makeRecorder(stream, mime, chunks) {
+      var rec = mime
+        ? new MediaRecorder(stream, {
+            mimeType: mime,
+            audioBitsPerSecond: 192000,
+          })
+        : new MediaRecorder(stream);
+      rec.ondataavailable = function (ev) {
+        if (ev.data && ev.data.size) chunks.push(ev.data);
+      };
+      return rec;
+    }
+
     /**
-     * Browser tidak mengizinkan baca PCM dari iframe YouTube (CORS).
-     * Cara yang viable: getDisplayMedia — user bagikan tab + audio,
-     * kita rekam sambil YT diputar, decode jadi AudioBuffer → ikut mix/export.
+     * Rekam audio tab YT + mic vokal BERSAMAAN → 2 track sinkron (ikut export).
+     * Iframe YT tetap tidak bisa dibaca PCM (CORS); tab-share = cara browser yang valid.
      */
     async function captureYtAudioToTrack() {
       if (ytCapturing) {
-        setStatus("Sedang mengambil audio YT…");
+        setStatus("Sedang merekam YT + vokal…");
         return;
       }
       if (ytTrackIdx < 0 || !tracks[ytTrackIdx] || tracks[ytTrackIdx].type !== "youtube") {
@@ -1076,6 +1098,15 @@
         setStatus("Browser tidak mendukung capture tab audio.");
         return;
       }
+      if (tracks.length + 2 > MAX_TRACKS) {
+        setStatus(
+          "Butuh 2 slot track kosong (YT audio + vokal). Hapus track dulu (max " +
+            MAX_TRACKS +
+            ")."
+        );
+        return;
+      }
+
       var tr = tracks[ytTrackIdx];
       var off = tr.offset || 0;
       var targetDur = tr.ytDuration || 0;
@@ -1085,94 +1116,104 @@
           tr.ytDuration = targetDur;
         } catch (e) {}
       }
-      if (targetDur < 1) targetDur = 180; // fallback 3 menit
+      if (targetDur < 1) targetDur = 180;
 
       var ok = await amxConfirm(
-        "Agar audio YouTube ikut di-export, browser harus merekam audio tab.\\n\\n" +
-          "1) Di dialog berikutnya: pilih tab ini (atau jendela)\\n" +
-          "2) Centang \"Bagikan audio tab\" / Share tab audio\\n" +
-          "3) Video YT akan diputar dari awal sambil direkam\\n\\n" +
-          "Lanjut?",
-        "Ambil audio YouTube"
+        "Rekam BERSAMAAN:\n" +
+          "• Audio YouTube (share tab + centang audio)\n" +
+          "• Vokal dari mikrofon\n\n" +
+          "Hasil: 2 track sinkron (bisa diatur vol terpisah), keduanya ikut export.\n\n" +
+          "Siapkan mic, lalu OK.",
+        "YT + Vokal bersamaan"
       );
       if (!ok) return;
 
-      var stream = null;
-      try {
-        setStatus("Pilih tab + centang audio…");
-        var opts = {
-          video: {
-            displaySurface: "browser",
-          },
-          audio: {
-            echoCancellation: false,
-            noiseSuppression: false,
-            autoGainControl: false,
-          },
-          preferCurrentTab: true,
-          selfBrowserSurface: "include",
-          systemAudio: "include",
-        };
+      var micStream = null;
+      var tabStream = null;
+      function stopAllStreams() {
         try {
-          stream = await navigator.mediaDevices.getDisplayMedia(opts);
+          if (micStream)
+            micStream.getTracks().forEach(function (t) {
+              t.stop();
+            });
+        } catch (e) {}
+        try {
+          if (tabStream)
+            tabStream.getTracks().forEach(function (t) {
+              t.stop();
+            });
+        } catch (e) {}
+      }
+
+      try {
+        setStatus("Izinkan mikrofon…");
+        micStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
+        });
+      } catch (e) {
+        setStatus("Mic ditolak: " + ((e && e.message) || e));
+        return;
+      }
+
+      try {
+        setStatus("Pilih tab ini + centang audio…");
+        try {
+          tabStream = await navigator.mediaDevices.getDisplayMedia({
+            video: { displaySurface: "browser" },
+            audio: {
+              echoCancellation: false,
+              noiseSuppression: false,
+              autoGainControl: false,
+            },
+            preferCurrentTab: true,
+            selfBrowserSurface: "include",
+            systemAudio: "include",
+          });
         } catch (e1) {
-          // Safari / Firefox partial support
-          stream = await navigator.mediaDevices.getDisplayMedia({
+          tabStream = await navigator.mediaDevices.getDisplayMedia({
             video: true,
             audio: true,
           });
         }
       } catch (e) {
-        setStatus(
-          "Capture dibatalkan / ditolak: " + ((e && e.message) || e)
-        );
+        stopAllStreams();
+        setStatus("Share tab dibatalkan: " + ((e && e.message) || e));
         return;
       }
 
-      var audioTracks = stream.getAudioTracks();
-      if (!audioTracks.length) {
-        try {
-          stream.getTracks().forEach(function (t) {
-            t.stop();
-          });
-        } catch (e) {}
+      var tabAudio = tabStream.getAudioTracks();
+      if (!tabAudio.length) {
+        stopAllStreams();
         setStatus(
-          "Tidak ada audio di share. Ulangi dan centang \"Bagikan audio tab\"."
+          'Tidak ada audio tab. Ulangi dan centang "Bagikan audio tab".'
         );
         return;
       }
 
       ytCapturing = true;
-      var chunks = [];
-      var mime = "";
-      try {
-        if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus"))
-          mime = "audio/webm;codecs=opus";
-        else if (MediaRecorder.isTypeSupported("audio/webm")) mime = "audio/webm";
-      } catch (e) {}
-
-      var recStream = new MediaStream(audioTracks);
-      var rec = mime
-        ? new MediaRecorder(recStream, {
-            mimeType: mime,
-            audioBitsPerSecond: 192000,
-          })
-        : new MediaRecorder(recStream);
-      rec.ondataavailable = function (ev) {
-        if (ev.data && ev.data.size) chunks.push(ev.data);
-      };
+      var mime = pickRecorderMime();
+      var chunksYt = [];
+      var chunksMic = [];
+      var recYt = makeRecorder(new MediaStream(tabAudio), mime, chunksYt);
+      var recMic = makeRecorder(micStream, mime, chunksMic);
 
       var stopped = false;
-      function cleanupStream() {
+      function stopRecs() {
+        if (stopped) return;
+        stopped = true;
         try {
-          stream.getTracks().forEach(function (t) {
-            t.stop();
-          });
+          if (recYt.state !== "inactive") recYt.stop();
+        } catch (e) {}
+        try {
+          if (recMic.state !== "inactive") recMic.stop();
         } catch (e) {}
       }
 
       try {
-        // Putar YT dari awal
         if (ytPlayer && ytReady) {
           try {
             ytPlayer.seekTo(0, true);
@@ -1180,35 +1221,37 @@
           } catch (e) {}
         }
         playhead = off;
-        rec.start(250);
+        // Start both as close as possible
+        recYt.start(200);
+        recMic.start(200);
+        setRecUi(true);
+        startRecTimer();
         setStatus(
-          "Merekam audio YT… " +
+          "Rekaman YT+vokal… " +
             fmt(targetDur) +
-            " — jangan pindah tab sumber audio"
+            " · headset disarankan agar mic tidak menangkap speaker"
         );
 
         await new Promise(function (resolve) {
-          var maxMs = Math.ceil(targetDur * 1000) + 800;
+          var pending = 2;
+          function oneDone() {
+            pending--;
+            if (pending <= 0) resolve();
+          }
+          var maxMs = Math.ceil(targetDur * 1000) + 1000;
           var timer = setTimeout(function () {
-            if (!stopped) {
-              stopped = true;
-              try {
-                if (rec.state !== "inactive") rec.stop();
-              } catch (e) {}
-            }
+            stopRecs();
           }, maxMs);
-          rec.onstop = function () {
+          recYt.onstop = function () {
             clearTimeout(timer);
-            resolve();
+            oneDone();
           };
-          stream.getVideoTracks().forEach(function (vt) {
+          recMic.onstop = function () {
+            oneDone();
+          };
+          tabStream.getVideoTracks().forEach(function (vt) {
             vt.addEventListener("ended", function () {
-              if (!stopped) {
-                stopped = true;
-                try {
-                  if (rec.state !== "inactive") rec.stop();
-                } catch (e) {}
-              }
+              stopRecs();
             });
           });
         });
@@ -1216,34 +1259,47 @@
         try {
           if (ytPlayer && ytReady) ytPlayer.pauseVideo();
         } catch (e) {}
-        cleanupStream();
+        stopAllStreams();
+        stopRecTimer();
+        setRecUi(false);
 
-        if (!chunks.length) {
-          setStatus("Tidak ada data audio tertangkap.");
-          ytCapturing = false;
-          return;
+        setStatus("Decode track YT + vokal…");
+        var ctx = ensureCtx();
+        var nYt = 0;
+        var nMic = 0;
+        if (chunksYt.length) {
+          var blobYt = new Blob(chunksYt, { type: mime || "audio/webm" });
+          var bufYt = await decodeBlob(ctx, blobYt);
+          var nameYt =
+            (tr.name ? String(tr.name).slice(0, 36) : "YouTube") + " (audio)";
+          if (addBuffer(bufYt, nameYt, off)) nYt = 1;
         }
-
-        setStatus("Decode audio YT…");
-        var blob = new Blob(chunks, { type: mime || "audio/webm" });
-        var buf = await decodeBlob(ensureCtx(), blob);
-        var name =
-          (tr.name ? String(tr.name).slice(0, 40) : "YouTube") + " (audio)";
-        var okAdd = addBuffer(buf, name, off);
-        if (okAdd) {
+        if (chunksMic.length) {
+          var blobMic = new Blob(chunksMic, { type: mime || "audio/webm" });
+          var bufMic = await decodeBlob(ctx, blobMic);
+          if (addBuffer(bufMic, "Vokal", off)) nMic = 1;
+        }
+        if (nYt && nMic) {
           setStatus(
-            "Audio YT jadi track · ikut mix/export. Video tetap guide lirik."
+            "2 track siap (YT audio + Vokal) @ " +
+              fmt(off) +
+              " · atur vol lalu export"
           );
+        } else if (nYt) {
+          setStatus("YT audio masuk; vokal kosong — cek izin mic.");
+        } else if (nMic) {
+          setStatus("Vokal masuk; YT audio kosong — centang audio tab.");
         } else {
-          setStatus("Gagal menambah track (mungkin penuh).");
+          setStatus("Tidak ada audio tertangkap.");
         }
       } catch (e) {
-        cleanupStream();
-        setStatus("Gagal ambil audio YT: " + ((e && e.message) || e));
+        stopAllStreams();
+        stopRecTimer();
+        setRecUi(false);
+        setStatus("Gagal rekam YT+vokal: " + ((e && e.message) || e));
       }
       ytCapturing = false;
     }
-
 
     function anySolo() {
       for (var i = 0; i < tracks.length; i++) {
