@@ -1460,3 +1460,172 @@ input.amx-off-input{
   }
   .amx-panel{ width: 100% !important; }
 }
+
+
+
+/* ========== v7 denser layout fixes ========== */
+.amx-toolbar{
+  display:flex!important;
+  flex-wrap:nowrap!important;
+  align-items:center!important;
+  gap:4px!important;
+  overflow-x:auto;
+  overflow-y:hidden;
+  margin:4px 0!important;
+  padding:0 10px!important;
+}
+.amx-toolbar .amx-master-lab,
+.amx-master-lab{
+  display:inline-flex!important;
+  align-items:center!important;
+  gap:3px!important;
+  margin:0!important;
+  padding:0!important;
+  border:none!important;
+  background:transparent!important;
+  flex:0 0 auto!important;
+}
+.amx-master-letter{
+  font-weight:800;font-size:11px;color:#7de3ff;width:12px;text-align:center;
+}
+.amx-master-lab input[type=range]{
+  width:56px!important;max-width:56px!important;min-width:48px!important;
+}
+.amx-master-lab [data-amx="master-val"]{
+  min-width:28px!important;font-size:10px!important;
+}
+.amx-toolbar .amx-icon-btn{
+  min-width:28px!important;padding:0 4px!important;
+}
+
+/* Mark times compact */
+.amx-region-tools{
+  display:flex!important;
+  flex-wrap:nowrap!important;
+  align-items:center!important;
+  gap:3px!important;
+  overflow-x:auto;
+  padding:0 10px!important;
+  margin:2px 0!important;
+}
+.amx-region-time,
+input.amx-region-time{
+  width:52px!important;
+  min-width:48px!important;
+  max-width:58px!important;
+  padding:2px 3px!important;
+  font-size:10px!important;
+  text-align:center!important;
+}
+.amx-region-tools .btn{flex-shrink:0}
+.amx-region-label{font-size:10px!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:28vw}
+
+/* Sliders Bal / Vol / Rev lebih pendek */
+.amx-slider-lab input[type=range],
+.amx-bal-lab input[type=range],
+.amx-vol-lab input[type=range],
+.amx-track-col-l .amx-slider-lab input[type=range]{
+  width:56px!important;
+  max-width:64px!important;
+  min-width:44px!important;
+  flex:0 0 56px!important;
+}
+.amx-slider-lab span{
+  min-width:26px!important;
+  font-size:10px!important;
+}
+
+/* Harm + Patokan + S2/S3 satu baris */
+.amx-harm-row,
+.amx-track-col-r{
+  display:flex!important;
+  flex-wrap:nowrap!important;
+  align-items:center!important;
+  gap:4px!important;
+  width:auto!important;
+  max-width:100%;
+}
+.amx-harm-lab,
+.amx-ref-lab{
+  display:inline-flex!important;
+  align-items:center!important;
+  gap:3px!important;
+  margin:0!important;
+  width:auto!important;
+  flex:0 0 auto!important;
+}
+.amx-harm-sel,
+.amx-ref-sel{
+  width:64px!important;
+  max-width:72px!important;
+  min-width:52px!important;
+  font-size:10px!important;
+  padding:2px 14px 2px 4px!important;
+}
+.amx-ref-sel{width:78px!important;max-width:90px!important}
+.amx-harm-suggest{
+  display:inline-flex!important;
+  flex-wrap:nowrap!important;
+  gap:2px!important;
+  margin:0!important;
+}
+.amx-harm-suggest .btn{
+  font-size:9px!important;
+  padding:1px 4px!important;
+  min-height:20px!important;
+  min-width:0!important;
+}
+
+/* Footer satu baris: undo redo wav mp3 webm showcase batal */
+.amx-foot{
+  display:flex!important;
+  flex-wrap:nowrap!important;
+  align-items:center!important;
+  justify-content:flex-start!important;
+  gap:4px!important;
+  overflow-x:auto!important;
+  overflow-y:hidden!important;
+  padding:4px 10px 8px!important;
+  margin:0!important;
+}
+.amx-foot-spacer{display:none!important}
+.amx-foot .btn{
+  flex:0 0 auto!important;
+  min-height:26px!important;
+  padding:0 7px!important;
+  font-size:10px!important;
+}
+.amx-export-btn,
+.amx-foot [data-amx="export"]{
+  background:rgba(11,108,240,.35)!important;
+  border-color:rgba(59,139,255,.55)!important;
+  color:#e8f4ff!important;
+  font-weight:800!important;
+}
+
+/* Track rows tighter */
+.amx-track{padding:5px 7px!important;margin:0!important}
+.amx-tracks{gap:3px!important;padding:0 10px!important}
+.amx-yt-dock{margin:4px 10px!important;padding:5px!important}
+.amx-yt-frame-wrap{max-height:140px!important}
+.amx-yt-hint{display:none} /* hemat vertikal; info di status */
+
+/* Transport row compact */
+.amx-transport{
+  display:flex!important;
+  flex-wrap:nowrap!important;
+  gap:2px!important;
+  padding:0 10px!important;
+  margin:2px 0!important;
+  overflow-x:auto;
+}
+.amx-scrub-row{margin:2px 0!important;padding:0 10px!important}
+.amx-timeline-wide,.amx-timeline{height:18px!important}
+
+/* Hide leftover stop-rec if present */
+.amx-toolbar [data-amx="stop-rec"]{display:none!important}
+
+@media (max-width:560px){
+  .amx-harm-row{flex-wrap:wrap!important}
+  .amx-foot{flex-wrap:wrap!important}
+}

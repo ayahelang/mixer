@@ -260,6 +260,14 @@
     if (window.YT && window.YT.Player) return Promise.resolve(window.YT);
     if (_ytApiPromise) return _ytApiPromise;
     _ytApiPromise = new Promise(function (resolve, reject) {
+      var done = false;
+      function finishOk() {
+        if (done) return;
+        if (window.YT && window.YT.Player) {
+          done = true;
+          resolve(window.YT);
+        }
+      }
       var prev = window.onYouTubeIframeAPIReady;
       window.onYouTubeIframeAPIReady = function () {
         if (typeof prev === "function") {
@@ -267,21 +275,36 @@
             prev();
           } catch (e) {}
         }
-        resolve(window.YT);
+        finishOk();
       };
       if (!document.querySelector('script[src*="youtube.com/iframe_api"]')) {
         var tag = document.createElement("script");
         tag.src = "https://www.youtube.com/iframe_api";
         tag.async = true;
         tag.onerror = function () {
-          reject(new Error("Gagal muat YouTube API"));
+          if (!done) {
+            done = true;
+            _ytApiPromise = null;
+            reject(new Error("Gagal muat YouTube API"));
+          }
         };
         document.head.appendChild(tag);
       }
-      // already loading
-      setTimeout(function () {
-        if (window.YT && window.YT.Player) resolve(window.YT);
-      }, 50);
+      var n = 0;
+      var iv = setInterval(function () {
+        n++;
+        if (window.YT && window.YT.Player) {
+          clearInterval(iv);
+          finishOk();
+        } else if (n > 100) {
+          clearInterval(iv);
+          if (!done) {
+            done = true;
+            _ytApiPromise = null;
+            reject(new Error("Timeout YouTube API"));
+          }
+        }
+      }, 100);
     });
     return _ytApiPromise;
   }
@@ -420,6 +443,8 @@
           : onExport
             ? "Kirim ke showcase"
             : null;
+    // label pendek di footer biar muat 1 baris
+    if (sendLabel === "Kirim ke showcase") sendLabel = "Showcase";
 
     var root = document.getElementById("shAudioMixerRoot");
     if (root) {
@@ -442,16 +467,15 @@
       "  </header>" +
       '  <div class="amx-toolbar">' +
       '    <button type="button" class="btn amx-sm amx-btn-rec" data-amx="rec" title="Rekam / Stop">● Rekam</button>' +
-      '    <button type="button" class="btn btn-ghost amx-sm" data-amx="stop-rec" hidden>■ Stop</button>' +
       '    <label class="btn btn-ghost amx-sm amx-upload">⬆ File<input type="file" accept="audio/*,.mp3,.wav,.ogg,.m4a,.webm" hidden data-amx="file"></label>' +
-      '    <button type="button" class="btn btn-ghost amx-sm" data-amx="yt-add" title="Sematkan video YouTube (karaoke / backing track) — putar sambil rekam vokal">▶ YT</button>' +
-      '    <label class="amx-master-lab" title="Master / Gain — dorong di atas 100% untuk lebih nyaring">' +
-      '      <span>Master</span>' +
+      '    <button type="button" class="btn btn-ghost amx-sm" data-amx="yt-add" title="Sematkan video YouTube (karaoke / backing track)">▶ YT</button>' +
+      '    <label class="amx-master-lab" title="Master / Gain (0–300%)">' +
+      '      <span class="amx-master-letter">M</span>' +
       '      <input type="range" min="0" max="300" value="100" data-amx="master">' +
       '      <span data-amx="master-val">100%</span>' +
       "    </label>" +
-      '    <button type="button" class="btn btn-ghost amx-sm amx-icon-btn" data-amx="mute-all" title="Mute semua track — senyapkan semua track" aria-label="Mute semua track">🔇</button>' +
-      '    <button type="button" class="btn btn-ghost amx-sm amx-icon-btn" data-amx="unmute-all" title="Unmute semua track — aktifkan suara semua track" aria-label="Unmute semua track">🔊</button>' +
+      '    <button type="button" class="btn btn-ghost amx-sm amx-icon-btn" data-amx="mute-all" title="Mute semua">🔇</button>' +
+      '    <button type="button" class="btn btn-ghost amx-sm amx-icon-btn" data-amx="unmute-all" title="Unmute semua">🔊</button>' +
       "  </div>" +
       '  <div class="amx-yt-dock" data-amx="ytdock" hidden>' +
       '    <div class="amx-yt-head">' +
@@ -477,9 +501,9 @@
       "  </div>" +
       '  <div class="amx-region-tools">' +
       '    <button type="button" class="btn btn-ghost amx-xs amx-mark-btn-in" data-amx="mark-in" title="Set Mark In di playhead">Mark In</button>' +
-      '    <input type="text" class="amx-region-time amx-region-time-in" data-amx="region-in-text" value="0:00.000" inputmode="numeric" title="Ketik Mark In (m:ss.mmm) + Enter">' +
+      '    <input type="text" class="amx-region-time amx-region-time-in" data-amx="region-in-text" value="0:00" inputmode="numeric" title="Mark In (m:ss / m:ss.mmm)">' +
       '    <button type="button" class="btn btn-ghost amx-xs amx-mark-btn-out" data-amx="mark-out" title="Set Mark Out di playhead">Mark Out</button>' +
-      '    <input type="text" class="amx-region-time amx-region-time-out" data-amx="region-out-text" value="0:00.000" inputmode="numeric" title="Ketik Mark Out (m:ss.mmm) + Enter">' +
+      '    <input type="text" class="amx-region-time amx-region-time-out" data-amx="region-out-text" value="0:00" inputmode="numeric" title="Mark Out (m:ss / m:ss.mmm)">' +
       '    <button type="button" class="btn btn-ghost amx-xs" data-amx="region-reset" title="Reset region ke seluruh durasi">Reset</button>' +
       '    <span class="muted amx-region-label" data-amx="region-label"></span>' +
       "  </div>" +
@@ -497,14 +521,13 @@
       '  <div class="amx-status muted" data-amx="status">Rekam / unggah track.</div>' +
       '  <div class="amx-tracks" data-amx="tracks"></div>' +
       '  <footer class="amx-foot">' +
-      '    <button type="button" class="btn btn-ghost amx-sm amx-hist-btn" data-amx="undo" title="Undo (kosong)" disabled aria-label="Undo">↶</button>' +
-      '    <button type="button" class="btn btn-ghost amx-sm amx-hist-btn" data-amx="redo" title="Redo (kosong)" disabled aria-label="Redo">↷</button>' +
-      '    <span class="amx-foot-spacer"></span>' +
-      '    <button type="button" class="btn btn-ghost amx-sm" data-amx="close">Batal</button>' +
-      '    <button type="button" class="btn btn-ghost amx-sm" data-amx="download-wav" title="Kualitas penuh">⬇ WAV</button>' +
-      '    <button type="button" class="btn btn-ghost amx-sm" data-amx="download-mp3" title="MP3 128kbps (lamejs)">⬇ MP3</button>' +
-      '    <button type="button" class="btn btn-ghost amx-sm" data-amx="download-webm" title="WebM/Opus kompres">⬇ WebM</button>' +
-      '    <button type="button" class="btn btn-primary amx-sm" data-amx="export" hidden>Kirim</button>' +
+      '    <button type="button" class="btn btn-ghost amx-sm amx-hist-btn" data-amx="undo" title="Undo" disabled aria-label="Undo">↶</button>' +
+      '    <button type="button" class="btn btn-ghost amx-sm amx-hist-btn" data-amx="redo" title="Redo" disabled aria-label="Redo">↷</button>' +
+      '    <button type="button" class="btn btn-ghost amx-sm" data-amx="download-wav" title="WAV">⬇ WAV</button>' +
+      '    <button type="button" class="btn btn-ghost amx-sm" data-amx="download-mp3" title="MP3">⬇ MP3</button>' +
+      '    <button type="button" class="btn btn-ghost amx-sm" data-amx="download-webm" title="WebM">⬇ WebM</button>' +
+      '    <button type="button" class="btn btn-primary amx-sm amx-export-btn" data-amx="export" hidden>Showcase</button>' +
+      '    <button type="button" class="btn btn-ghost amx-sm" data-amx="close" title="Tutup">Batal</button>' +
       "  </footer>" +
       "</div>";
     document.body.appendChild(root);
@@ -872,14 +895,29 @@
       if (titleEl) titleEl.textContent = "YT · " + vid;
       loadYouTubeApi()
         .then(function (YT) {
-          var host = root.querySelector("#amxYtPlayer");
-          if (!host) return;
-          host.innerHTML = "";
+          var wrap = root.querySelector(".amx-yt-frame-wrap");
+          if (!wrap) {
+            setStatus("Panel YT tidak ditemukan.");
+            return;
+          }
+          // YT.Player mengganti node — selalu buat ulang host bersih
+          wrap.innerHTML = '<div id="amxYtPlayer" class="amx-yt-player"></div>';
+          var vars = {
+            rel: 0,
+            modestbranding: 1,
+            playsinline: 1,
+            enablejsapi: 1,
+          };
+          try {
+            if (location.protocol === "http:" || location.protocol === "https:") {
+              vars.origin = location.origin;
+            }
+          } catch (e) {}
           ytPlayer = new YT.Player("amxYtPlayer", {
             width: "100%",
             height: "100%",
             videoId: vid,
-            playerVars: { rel: 0, modestbranding: 1, playsinline: 1, origin: location.origin },
+            playerVars: vars,
             events: {
               onReady: function (ev) {
                 ytReady = true;
@@ -893,10 +931,17 @@
                 } catch (e) {}
                 renderTracks();
                 updateTransportUI();
-                setStatus("YouTube siap · play transport = guide karaoke/backing. Audio YT tidak ikut export — rekam vokal di track terpisah.");
+                setStatus(
+                  "YouTube siap · play = guide karaoke. Audio YT tidak ikut export."
+                );
               },
-              onError: function () {
-                setStatus("YouTube error — cek link / batasan embedding.");
+              onError: function (ev) {
+                var c = ev && ev.data;
+                setStatus(
+                  "YouTube error " +
+                    (c != null ? c : "") +
+                    " — video mungkin tidak boleh di-embed."
+                );
               },
             },
           });
@@ -1825,58 +1870,31 @@
           "%</span></label>" +
           "</div>" +
           '<div class="amx-track-col-r">' +
-          '<label class="amx-slider-lab amx-harm-lab" title="Harmoni">' +
-          'Harm <select class="amx-harm-sel" data-act="harm" data-i="' +
+          '<div class="amx-harm-row">' +
+          '<label class="amx-slider-lab amx-harm-lab" title="Harmoni">H <select class="amx-harm-sel" data-act="harm" data-i="' +
           idx +
           '">' +
-          '<option value="0"' +
-          (semi === 0 ? " selected" : "") +
-          ">Ori</option>" +
-          '<option value="3"' +
-          (semi === 3 ? " selected" : "") +
-          ">S2 ↑ +3</option>" +
-          '<option value="4"' +
-          (semi === 4 ? " selected" : "") +
-          ">S2 ↑ +4</option>" +
-          '<option value="-3"' +
-          (semi === -3 ? " selected" : "") +
-          ">S2 ↓ −3</option>" +
-          '<option value="-4"' +
-          (semi === -4 ? " selected" : "") +
-          ">S2 ↓ −4</option>" +
-          '<option value="7"' +
-          (semi === 7 ? " selected" : "") +
-          ">S3 ↑ +7</option>" +
-          '<option value="-7"' +
-          (semi === -7 ? " selected" : "") +
-          ">S3 ↓ −7</option>" +
-          '<option value="12"' +
-          (semi === 12 ? " selected" : "") +
-          ">Oktaf ↑</option>" +
-          '<option value="-12"' +
-          (semi === -12 ? " selected" : "") +
-          ">Oktaf ↓</option>" +
+          '<option value="0"' + (semi === 0 ? " selected" : "") + ">Ori</option>" +
+          '<option value="3"' + (semi === 3 ? " selected" : "") + ">+3</option>" +
+          '<option value="4"' + (semi === 4 ? " selected" : "") + ">+4</option>" +
+          '<option value="-3"' + (semi === -3 ? " selected" : "") + ">−3</option>" +
+          '<option value="-4"' + (semi === -4 ? " selected" : "") + ">−4</option>" +
+          '<option value="7"' + (semi === 7 ? " selected" : "") + ">+7</option>" +
+          '<option value="-7"' + (semi === -7 ? " selected" : "") + ">−7</option>" +
+          '<option value="12"' + (semi === 12 ? " selected" : "") + ">+12</option>" +
+          '<option value="-12"' + (semi === -12 ? " selected" : "") + ">−12</option>" +
           "</select></label>" +
-          '<label class="amx-slider-lab amx-ref-lab" title="Patokan">' +
-          'Patokan <select class="amx-ref-sel" data-act="ref" data-i="' +
+          '<label class="amx-slider-lab amx-ref-lab" title="Patokan">P <select class="amx-ref-sel" data-act="ref" data-i="' +
           idx +
           '">' +
           refOpts +
           "</select></label>" +
           '<div class="amx-harm-suggest">' +
-          '<button type="button" class="btn btn-ghost amx-xs" data-act="harm-s2up" data-i="' +
-          idx +
-          '" title="S2 naik">S2↑</button>' +
-          '<button type="button" class="btn btn-ghost amx-xs" data-act="harm-s2dn" data-i="' +
-          idx +
-          '" title="S2 turun">S2↓</button>' +
-          '<button type="button" class="btn btn-ghost amx-xs" data-act="harm-s3up" data-i="' +
-          idx +
-          '" title="S3 naik">S3↑</button>' +
-          '<button type="button" class="btn btn-ghost amx-xs" data-act="harm-s3dn" data-i="' +
-          idx +
-          '" title="S3 turun">S3↓</button>' +
-          "</div>" +
+          '<button type="button" class="btn btn-ghost amx-xs" data-act="harm-s2up" data-i="' + idx + '" title="S2 naik">S2↑</button>' +
+          '<button type="button" class="btn btn-ghost amx-xs" data-act="harm-s2dn" data-i="' + idx + '" title="S2 turun">S2↓</button>' +
+          '<button type="button" class="btn btn-ghost amx-xs" data-act="harm-s3up" data-i="' + idx + '" title="S3 naik">S3↑</button>' +
+          '<button type="button" class="btn btn-ghost amx-xs" data-act="harm-s3dn" data-i="' + idx + '" title="S3 turun">S3↓</button>' +
+          "</div></div>" +
           "</div>" +
           "</div>";
         if (!tr.expanded) row.classList.add("is-collapsed");
