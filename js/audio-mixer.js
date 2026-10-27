@@ -310,18 +310,66 @@
   }
 
 
-  /** Custom modal (ganti alert/confirm/prompt browser) */
+
+  /** Pastikan CSS dialog + scrollbar custom terpasang (tahan jika stylesheet lama) */
+  function ensureAmxUiCss() {
+    if (document.getElementById("amx-ui-inject")) return;
+    var s = document.createElement("style");
+    s.id = "amx-ui-inject";
+    s.textContent = [
+      ".amx-dialog-overlay{position:fixed!important;inset:0!important;z-index:2147483000!important;",
+      "display:flex!important;align-items:center!important;justify-content:center!important;",
+      "padding:16px!important;background:rgba(4,10,20,.78)!important;backdrop-filter:blur(5px);",
+      "margin:0!important;box-sizing:border-box!important}",
+      ".amx-dialog{width:min(380px,100%)!important;max-width:100%!important;",
+      "background:linear-gradient(165deg,#1a2740,#101a2c)!important;",
+      "border:1px solid rgba(125,227,255,.35)!important;border-radius:14px!important;",
+      "box-shadow:0 20px 50px rgba(0,0,0,.6)!important;color:#e8eef7!important;",
+      "overflow:hidden!important;position:relative!important;flex:none!important}",
+      ".amx-dialog-head{display:flex;align-items:center;gap:8px;padding:10px 12px;",
+      "background:linear-gradient(135deg,rgba(30,60,90,.95),rgba(14,28,42,.98));",
+      "border-bottom:1px solid rgba(125,227,255,.18)}",
+      ".amx-dialog-title{font-size:13px;font-weight:700;flex:1}",
+      ".amx-dialog-body{padding:12px 14px}",
+      ".amx-dialog-msg{margin:0 0 10px;font-size:12px;line-height:1.45;color:#c5d4e6;white-space:pre-wrap}",
+      ".amx-dialog-input{width:100%!important;box-sizing:border-box!important;min-height:34px!important;",
+      "padding:8px 10px!important;font-size:13px!important;font-weight:600!important;",
+      "border-radius:8px!important;border:1px solid rgba(125,227,255,.4)!important;",
+      "background:rgba(0,0,0,.45)!important;color:#e8f7ff!important;outline:none!important}",
+      ".amx-dialog-input:focus{border-color:#7de3ff!important;box-shadow:0 0 0 2px rgba(125,227,255,.25)!important}",
+      ".amx-dialog-foot{display:flex;justify-content:flex-end;gap:8px;padding:8px 12px 12px}",
+      ".amx-dialog-foot .btn{min-height:32px!important;padding:0 14px!important;cursor:pointer}",
+      ".amx-dialog-foot .btn-primary{background:rgba(11,108,240,.4)!important;border:1px solid rgba(59,139,255,.55)!important;color:#fff!important}",
+      /* scrollbars */
+      ".amx-root,.amx-panel,.amx-tracks,.amx-dialog-body,.amx-toolbar,.amx-transport,.amx-foot{",
+      "scrollbar-width:thin!important;scrollbar-color:rgba(94,200,255,.55) rgba(0,0,0,.3)!important}",
+      ".amx-root::-webkit-scrollbar,.amx-panel::-webkit-scrollbar,.amx-tracks::-webkit-scrollbar,",
+      ".amx-toolbar::-webkit-scrollbar,.amx-transport::-webkit-scrollbar,.amx-foot::-webkit-scrollbar{",
+      "width:8px!important;height:8px!important}",
+      ".amx-root::-webkit-scrollbar-track,.amx-panel::-webkit-scrollbar-track,.amx-tracks::-webkit-scrollbar-track{",
+      "background:rgba(0,0,0,.28)!important;border-radius:8px!important}",
+      ".amx-root::-webkit-scrollbar-thumb,.amx-panel::-webkit-scrollbar-thumb,.amx-tracks::-webkit-scrollbar-thumb,",
+      ".amx-toolbar::-webkit-scrollbar-thumb,.amx-transport::-webkit-scrollbar-thumb{",
+      "background:linear-gradient(180deg,rgba(125,227,255,.65),rgba(59,139,255,.45))!important;",
+      "border-radius:8px!important;border:2px solid transparent!important;background-clip:padding-box!important}",
+      ".amx-root::-webkit-scrollbar-thumb:hover,.amx-panel::-webkit-scrollbar-thumb:hover{",
+      "background:rgba(125,227,255,.85)!important}",
+    ].join("");
+    document.head.appendChild(s);
+  }
+
+  /** Custom modal — fixed ke viewport, tidak menggeser panel */
   function amxDialog(opts) {
     opts = opts || {};
+    ensureAmxUiCss();
     return new Promise(function (resolve) {
-      var root = document.getElementById("shAudioMixerRoot") || document.body;
       var overlay = document.createElement("div");
       overlay.className = "amx-dialog-overlay";
       overlay.setAttribute("role", "dialog");
       overlay.setAttribute("aria-modal", "true");
       var title = opts.title || "Audio Mixer";
       var message = opts.message || "";
-      var kind = opts.kind || "alert"; // alert | confirm | prompt
+      var kind = opts.kind || "alert";
       var def = opts.defaultValue != null ? String(opts.defaultValue) : "";
       var okLabel = opts.okLabel || "OK";
       var cancelLabel = opts.cancelLabel || "Batal";
@@ -334,7 +382,7 @@
         '<div class="amx-dialog-body">' +
         '<p class="amx-dialog-msg"></p>' +
         (kind === "prompt"
-          ? '<input type="text" class="amx-dialog-input" autocomplete="off" spellcheck="false">'
+          ? '<input type="text" class="amx-dialog-input" autocomplete="off" spellcheck="false" placeholder="https://www.youtube.com/watch?v=…">'
           : "") +
         "</div>" +
         '<div class="amx-dialog-foot">' +
@@ -350,10 +398,8 @@
       if (input) input.value = def;
       var okBtn = overlay.querySelector('[data-amx-dlg="ok"]');
       okBtn.textContent = okLabel;
-      var cancelBtns = overlay.querySelectorAll('[data-amx-dlg="cancel"]');
-      cancelBtns.forEach(function (b) {
-        if (b.classList.contains("amx-dialog-x")) return;
-        b.textContent = cancelLabel;
+      overlay.querySelectorAll('[data-amx-dlg="cancel"]').forEach(function (b) {
+        if (!b.classList.contains("amx-dialog-x")) b.textContent = cancelLabel;
       });
       function finish(val) {
         try {
@@ -361,13 +407,17 @@
         } catch (e) {}
         resolve(val);
       }
-      okBtn.addEventListener("click", function () {
+      okBtn.addEventListener("click", function (ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
         if (kind === "prompt") finish(input ? input.value : "");
         else if (kind === "confirm") finish(true);
         else finish(true);
       });
-      cancelBtns.forEach(function (b) {
-        b.addEventListener("click", function () {
+      overlay.querySelectorAll('[data-amx-dlg="cancel"]').forEach(function (b) {
+        b.addEventListener("click", function (ev) {
+          ev.preventDefault();
+          ev.stopPropagation();
           if (kind === "confirm") finish(false);
           else if (kind === "prompt") finish(null);
           else finish(false);
@@ -380,6 +430,13 @@
           else finish(true);
         }
       });
+      // cegah klik di dialog menggelembung ke mixer
+      overlay.addEventListener("mousedown", function (ev) {
+        ev.stopPropagation();
+      });
+      overlay.addEventListener("pointerdown", function (ev) {
+        ev.stopPropagation();
+      });
       overlay.addEventListener("keydown", function (ev) {
         if (ev.key === "Escape") {
           ev.preventDefault();
@@ -391,7 +448,7 @@
           finish(input ? input.value : "");
         }
       });
-      root.appendChild(overlay);
+      document.body.appendChild(overlay);
       setTimeout(function () {
         if (input) {
           input.focus();
@@ -2695,6 +2752,8 @@
         else startRec();
       } else if (amx === "stop-rec") stopRec();
       else if (amx === "yt-add") {
+        if (ev && ev.preventDefault) ev.preventDefault();
+        if (ev && ev.stopPropagation) ev.stopPropagation();
         amxPrompt(
           "Tempel link YouTube (karaoke / backing track).\nContoh: https://www.youtube.com/watch?v=…",
           "",
@@ -2702,6 +2761,7 @@
         ).then(function (u) {
           if (u && String(u).trim()) addYouTubeTrack(String(u).trim());
         });
+        return;
       } else if (amx === "yt-remove") {
         tracks = tracks.filter(function (t) { return t.type !== "youtube"; });
         destroyYtPlayer();
@@ -3406,6 +3466,7 @@
     }
 
     renderTracks();
+    ensureAmxUiCss();
     root.classList.add("is-open");
     setStatus("Siap · max " + MAX_TRACKS + " · vol/reverb per track · geser judul.");
   }

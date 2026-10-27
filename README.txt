@@ -1,18 +1,22 @@
-Silverhawk Mixer — patch v7
+Silverhawk Mixer — patch v8
 ===========================
 js/audio-mixer.js
 css/audio-mixer-amx.css
 studio.html
 
-Perbaikan
----------
-• YT: host player dibuat ulang sebelum embed; loader API lebih tahan timeout;
-  origin hanya di http(s); pesan error lebih jelas
-• Stop rekam terpisah dihapus — tombol ● Rekam ↔ ■ Stop
-• Master (M) + mute/unmute dipaksa satu baris dengan Rekam / File / YT
-• Mark In/Out time input dipersempit (~52px)
-• Bal / Vol / Rev slider lebih pendek (~56px)
-• Harm + Patokan + S2↑↓ S3↑↓ satu baris (label H / P)
-• Footer satu baris: ↶ ↷ | WAV MP3 WebM | Showcase | Batal
-• Label export pendek "Showcase" (tooltip/context tetap showcase)
-• Dock YT lebih rendah; hint panjang disembunyikan (info di status)
+Perbaikan fokus
+---------------
+1. Tombol ▶ YT → modal input link muncul di TENGAH layar
+   (position:fixed ke document.body, z-index sangat tinggi)
+   Sebelumnya overlay ikut flex root sehingga panel bergeser ke kiri
+   dan kotak input tidak terlihat sebagai dialog.
+
+2. CSS dialog + scrollbar di-inject juga lewat JS (ensureAmxUiCss)
+   saat panel dibuka — tetap custom meski stylesheet lama ter-cache.
+
+3. Scrollbar custom dipaksa di .amx-root / .amx-panel / .amx-tracks
+   (WebKit + Firefox).
+
+Cara uji YT
+-----------
+Klik ▶ YT → modal "Sematkan YouTube" → tempel link → OK.
