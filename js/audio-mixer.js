@@ -1,7 +1,8 @@
 /**
  * SHAudioMixer — multi-track (max 8)
  * Master timeline + playhead, volume & reverb per track,
- * overdub offset, panel draggable, Simpan WAV/WebM + Kirim (WebM ke chat).
+ * overdub offset, panel draggable, Simpan WAV/WebM + Kirim ke showcase.
+ * YouTube guide track (karaoke/backing) sinkron transport.
  */
 (function (global) {
   "use strict";
@@ -239,17 +240,63 @@
     });
   }
 
+
+  /** Extract YouTube video id from URL or bare id */
+  function parseYouTubeId(input) {
+    if (!input) return "";
+    var s = String(input).trim();
+    if (/^[\w-]{11}$/.test(s)) return s;
+    var m =
+      s.match(/[?&]v=([\w-]{11})/) ||
+      s.match(/youtu\.be\/([\w-]{11})/) ||
+      s.match(/youtube\.com\/embed\/([\w-]{11})/) ||
+      s.match(/youtube\.com\/shorts\/([\w-]{11})/) ||
+      s.match(/youtube\.com\/live\/([\w-]{11})/);
+    return m ? m[1] : "";
+  }
+
+  var _ytApiPromise = null;
+  function loadYouTubeApi() {
+    if (window.YT && window.YT.Player) return Promise.resolve(window.YT);
+    if (_ytApiPromise) return _ytApiPromise;
+    _ytApiPromise = new Promise(function (resolve, reject) {
+      var prev = window.onYouTubeIframeAPIReady;
+      window.onYouTubeIframeAPIReady = function () {
+        if (typeof prev === "function") {
+          try {
+            prev();
+          } catch (e) {}
+        }
+        resolve(window.YT);
+      };
+      if (!document.querySelector('script[src*="youtube.com/iframe_api"]')) {
+        var tag = document.createElement("script");
+        tag.src = "https://www.youtube.com/iframe_api";
+        tag.async = true;
+        tag.onerror = function () {
+          reject(new Error("Gagal muat YouTube API"));
+        };
+        document.head.appendChild(tag);
+      }
+      // already loading
+      setTimeout(function () {
+        if (window.YT && window.YT.Player) resolve(window.YT);
+      }, 50);
+    });
+    return _ytApiPromise;
+  }
+
   function open(opts) {
     opts = opts || {};
     var onExport = opts.onExport || null;
-    var context = opts.context || (onExport ? "chat" : "generic");
+    var context = opts.context || (onExport ? "showcase" : "generic");
     var sendLabel =
       context === "announce"
         ? "Kirim ke pengumuman"
-        : context === "chat"
-          ? "Kirim ke chat"
+        : context === "showcase" || context === "chat"
+          ? "Kirim ke showcase"
           : onExport
-            ? "Kirim hasil mix"
+            ? "Kirim ke showcase"
             : null;
 
     var root = document.getElementById("shAudioMixerRoot");
@@ -275,6 +322,7 @@
       '    <button type="button" class="btn amx-sm amx-btn-rec" data-amx="rec" title="Rekam / Stop">● Rekam</button>' +
       '    <button type="button" class="btn btn-ghost amx-sm" data-amx="stop-rec" hidden>■ Stop</button>' +
       '    <label class="btn btn-ghost amx-sm amx-upload">⬆ File<input type="file" accept="audio/*,.mp3,.wav,.ogg,.m4a,.webm" hidden data-amx="file"></label>' +
+      '    <button type="button" class="btn btn-ghost amx-sm" data-amx="yt-add" title="Sematkan video YouTube (karaoke / backing track) — putar sambil rekam vokal">▶ YT</button>' +
       '    <label class="amx-master-lab" title="Master / Gain — dorong di atas 100% untuk lebih nyaring">' +
       '      <span>Master</span>' +
       '      <input type="range" min="0" max="300" value="100" data-amx="master">' +
@@ -282,6 +330,14 @@
       "    </label>" +
       '    <button type="button" class="btn btn-ghost amx-sm amx-icon-btn" data-amx="mute-all" title="Mute semua track — senyapkan semua track" aria-label="Mute semua track">🔇</button>' +
       '    <button type="button" class="btn btn-ghost amx-sm amx-icon-btn" data-amx="unmute-all" title="Unmute semua track — aktifkan suara semua track" aria-label="Unmute semua track">🔊</button>' +
+      "  </div>" +
+      '  <div class="amx-yt-dock" data-amx="ytdock" hidden>' +
+      '    <div class="amx-yt-head">' +
+      '      <span class="amx-yt-title" data-amx="yttitle">YouTube</span>' +
+      '      <span class="muted amx-yt-hint">Guide / karaoke · audio YT tidak ikut export mix (rekam vokal terpisah)</span>' +
+      '      <button type="button" class="btn btn-ghost amx-xs" data-amx="yt-remove" title="Lepas video YouTube">✕</button>' +
+      "    </div>" +
+      '    <div class="amx-yt-frame-wrap"><div id="amxYtPlayer" class="amx-yt-player"></div></div>' +
       "  </div>" +
       '  <div class="amx-transport">' +
       '    <button type="button" class="btn btn-ghost amx-nav" data-amx="to-start" title="Awal">⏮</button>' +
@@ -332,6 +388,10 @@
     document.body.appendChild(root);
 
     var tracks = [];
+    var ytPlayer = null;
+    var ytTrackIdx = -1; // index in tracks[] if youtube guide attached
+    var ytReady = false;
+
     var undoStack = [];
     var redoStack = [];
     var MAX_HISTORY = 5;
@@ -587,12 +647,141 @@
     function maxDur() {
       var m = 0;
       tracks.forEach(function (t) {
+        if (t.type === "youtube") {
+          var yd = typeof t.ytDuration === "number" ? t.ytDuration : 0;
+          var endY = (t.offset || 0) + yd;
+          if (endY > m) m = endY;
+          return;
+        }
         if (!t.buffer) return;
-        // ujung clip di timeline = Start + (MarkOut - MarkIn)
         var end = (t.offset || 0) + trackActiveDur(t);
         if (end > m) m = end;
       });
       return m;
+    }
+
+    function getYtDock() {
+      return root.querySelector("[data-amx=ytdock]");
+    }
+
+    function destroyYtPlayer() {
+      try {
+        if (ytPlayer && ytPlayer.destroy) ytPlayer.destroy();
+      } catch (e) {}
+      ytPlayer = null;
+      ytReady = false;
+      ytTrackIdx = -1;
+      var dock = getYtDock();
+      if (dock) {
+        dock.hidden = true;
+        dock.setAttribute("hidden", "");
+      }
+      var host = root.querySelector("#amxYtPlayer");
+      if (host) host.innerHTML = "";
+    }
+
+    function syncYtToPlayhead(forceSeek) {
+      if (!ytPlayer || !ytReady || ytTrackIdx < 0) return;
+      var tr = tracks[ytTrackIdx];
+      if (!tr || tr.muted) {
+        try { ytPlayer.pauseVideo(); } catch (e) {}
+        return;
+      }
+      var off = tr.offset || 0;
+      var head = currentPlayhead();
+      var local = head - off;
+      var dur = tr.ytDuration || 0;
+      if (local < -0.15 || (dur > 0 && local > dur + 0.2)) {
+        try { ytPlayer.pauseVideo(); } catch (e) {}
+        return;
+      }
+      if (local < 0) local = 0;
+      try {
+        if (forceSeek || isPlaying || isRecording) {
+          var cur = ytPlayer.getCurrentTime ? ytPlayer.getCurrentTime() : 0;
+          if (forceSeek || Math.abs(cur - local) > 0.35) {
+            ytPlayer.seekTo(local, true);
+          }
+        }
+        if (isPlaying || isRecording) {
+          var st = ytPlayer.getPlayerState ? ytPlayer.getPlayerState() : -1;
+          if (st !== 1) ytPlayer.playVideo();
+        }
+      } catch (e) {}
+    }
+
+    function addYouTubeTrack(urlOrId) {
+      var vid = parseYouTubeId(urlOrId);
+      if (!vid) {
+        setStatus("URL / ID YouTube tidak valid.");
+        return;
+      }
+      if (tracks.length >= MAX_TRACKS) {
+        setStatus("Maks. " + MAX_TRACKS + " track.");
+        return;
+      }
+      if (ytTrackIdx >= 0) {
+        tracks = tracks.filter(function (t) { return t.type !== "youtube"; });
+        destroyYtPlayer();
+      }
+      var off = currentPlayhead();
+      tracks.push({
+        id: "yt" + Date.now(),
+        type: "youtube",
+        videoId: vid,
+        name: "YT " + vid,
+        buffer: null,
+        muted: false,
+        solo: false,
+        offset: Math.max(0, off > 0.05 ? off : 0),
+        volume: 1,
+        reverb: 0,
+        ytDuration: 0,
+      });
+      ytTrackIdx = tracks.length - 1;
+      renderTracks();
+      setStatus("Memuat YouTube…");
+      var dock = getYtDock();
+      if (dock) {
+        dock.hidden = false;
+        dock.removeAttribute("hidden");
+      }
+      var titleEl = root.querySelector("[data-amx=yttitle]");
+      if (titleEl) titleEl.textContent = "YT · " + vid;
+      loadYouTubeApi()
+        .then(function (YT) {
+          var host = root.querySelector("#amxYtPlayer");
+          if (!host) return;
+          host.innerHTML = "";
+          ytPlayer = new YT.Player("amxYtPlayer", {
+            width: "100%",
+            height: "100%",
+            videoId: vid,
+            playerVars: { rel: 0, modestbranding: 1, playsinline: 1, origin: location.origin },
+            events: {
+              onReady: function (ev) {
+                ytReady = true;
+                try {
+                  var d = ev.target.getDuration();
+                  if (ytTrackIdx >= 0 && tracks[ytTrackIdx]) {
+                    tracks[ytTrackIdx].ytDuration = d || 0;
+                    var vd = ev.target.getVideoData && ev.target.getVideoData();
+                    if (vd && vd.title) tracks[ytTrackIdx].name = vd.title;
+                  }
+                } catch (e) {}
+                renderTracks();
+                updateTransportUI();
+                setStatus("YouTube siap · play transport = guide karaoke/backing. Audio YT tidak ikut export — rekam vokal di track terpisah.");
+              },
+              onError: function () {
+                setStatus("YouTube error — cek link / batasan embedding.");
+              },
+            },
+          });
+        })
+        .catch(function (e) {
+          setStatus("YouTube API: " + ((e && e.message) || e));
+        });
     }
 
     function anySolo() {
@@ -906,6 +1095,9 @@
         updateTransportUI();
         drawTrackPeaks();
         var total = maxDur();
+        if (isPlaying || isRecording) {
+          try { syncYtToPlayhead(false); } catch (e) {}
+        }
         if (isPlaying && !isRecording && total > 0 && currentPlayhead() >= total + 0.05) {
           stopPlayback(true);
         }
@@ -983,6 +1175,9 @@
       }
       if (!isRecording) stopMeter();
       setTrackMetersVisible(false);
+      try {
+        if (ytPlayer && ytReady) ytPlayer.pauseVideo();
+      } catch (e) {}
       updateTransportUI();
     }
 
@@ -1263,6 +1458,7 @@
       startTransportLoop();
       startPlayMeter();
       setTrackMetersVisible(true);
+      try { syncYtToPlayhead(true); } catch (e) {}
     }
 
     function seekTo(sec) {
@@ -1272,6 +1468,7 @@
       stopPlayback(true);
       playhead = t;
       updateTransportUI();
+      try { syncYtToPlayhead(true); } catch (e) {}
       if (wasPlaying) playAll();
     }
 
@@ -1288,8 +1485,28 @@
       }
       tracks.forEach(function (tr, idx) {
         var row = document.createElement("div");
-        row.className = "amx-track" + (tr.muted ? " is-muted" : "") + (tr.solo ? " is-solo" : "");
+        row.className = "amx-track" + (tr.muted ? " is-muted" : "") + (tr.solo ? " is-solo" : "") + (tr.type === "youtube" ? " amx-track-yt" : "");
         row.setAttribute("data-track-i", String(idx));
+        if (tr.type === "youtube") {
+          var yOff = Math.max(0, tr.offset || 0);
+          row.innerHTML =
+            '<div class="amx-track-hd">' +
+            '<span class="amx-track-idx">T' + (idx + 1) + "</span>" +
+            '<span class="amx-track-name" title="YouTube guide">' +
+            escHtml(tr.name || "YouTube") +
+            "</span>" +
+            '<span class="amx-track-dur">' +
+            fmt(tr.ytDuration || 0) +
+            (yOff > 0.05 ? " @" + fmt(yOff) : "") +
+            " · YT guide</span>" +
+            '<div class="amx-track-acts">' +
+            '<button type="button" class="btn btn-ghost amx-xs" data-act="mute" data-i="' + idx + '" title="Mute/unmute guide">M</button>' +
+            '<button type="button" class="btn btn-ghost amx-xs" data-act="del" data-i="' + idx + '" title="Hapus">×</button>' +
+            "</div></div>" +
+            '<p class="muted amx-yt-row-hint">Video di panel atas · sinkron transport · tidak masuk export mix</p>';
+          listEl.appendChild(row);
+          return;
+        }
         var offSec = Math.max(0, tr.offset || 0);
         var offLabel =
           offSec > 0.05 ? " @" + fmt(offSec) : "";
@@ -1660,6 +1877,7 @@
           mediaRec = null;
           if (recOffsetEl) recOffsetEl.textContent = "";
         };
+        try { syncYtToPlayhead(true); } catch (eYt) {}
         mediaRec.start(200);
         startMeter(mediaStream);
         startRecTimer();
@@ -2080,6 +2298,7 @@
     function close() {
       stopRec();
       stopPlayback(true);
+      try { destroyYtPlayer(); } catch (e) {}
       stopMeter();
       stopRecTimer();
       stopTransportLoop();
@@ -2331,6 +2550,19 @@
         if (isRecording) stopRec();
         else startRec();
       } else if (amx === "stop-rec") stopRec();
+      else if (amx === "yt-add") {
+        var u = window.prompt(
+          "Tempel link YouTube (karaoke / backing track):\nContoh: https://www.youtube.com/watch?v=…",
+          ""
+        );
+        if (u) addYouTubeTrack(u);
+      } else if (amx === "yt-remove") {
+        tracks = tracks.filter(function (t) { return t.type !== "youtube"; });
+        destroyYtPlayer();
+        renderTracks();
+        updateTransportUI();
+        setStatus("YouTube dilepas.");
+      }
       else if (amx === "play") playAll();
       else if (amx === "stop") {
         stopPlayback(true);
@@ -2469,8 +2701,17 @@
         }
       } else if (act === "del") {
         var j = Number(t.getAttribute("data-i"));
+        if (tracks[j] && tracks[j].type === "youtube") {
+          destroyYtPlayer();
+        }
         tracks.splice(j, 1);
+        // re-index yt
+        ytTrackIdx = -1;
+        tracks.forEach(function (t2, i2) {
+          if (t2.type === "youtube") ytTrackIdx = i2;
+        });
         renderTracks();
+        updateTransportUI();
       } else if (act === "solo-play") {
         // handled by pointer handlers (play/pause · long-press stop)
         return;

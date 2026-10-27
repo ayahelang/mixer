@@ -55,8 +55,13 @@
           return;
         }
         SHAudioMixer.open({
+          context: "showcase",
           onExport: function (blob) {
-            MixerUI.toast("Export siap · " + Math.round(blob.size / 1024) + " KB");
+            MixerUI.toast(
+              "Mix siap untuk showcase · " +
+                Math.round(blob.size / 1024) +
+                " KB. Login lalu unggah ke galeri publik."
+            );
           },
         });
       };
