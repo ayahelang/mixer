@@ -286,6 +286,128 @@
     return _ytApiPromise;
   }
 
+
+  /** Custom modal (ganti alert/confirm/prompt browser) */
+  function amxDialog(opts) {
+    opts = opts || {};
+    return new Promise(function (resolve) {
+      var root = document.getElementById("shAudioMixerRoot") || document.body;
+      var overlay = document.createElement("div");
+      overlay.className = "amx-dialog-overlay";
+      overlay.setAttribute("role", "dialog");
+      overlay.setAttribute("aria-modal", "true");
+      var title = opts.title || "Audio Mixer";
+      var message = opts.message || "";
+      var kind = opts.kind || "alert"; // alert | confirm | prompt
+      var def = opts.defaultValue != null ? String(opts.defaultValue) : "";
+      var okLabel = opts.okLabel || "OK";
+      var cancelLabel = opts.cancelLabel || "Batal";
+      overlay.innerHTML =
+        '<div class="amx-dialog">' +
+        '<div class="amx-dialog-head">' +
+        '<strong class="amx-dialog-title"></strong>' +
+        '<button type="button" class="btn btn-ghost amx-xs amx-dialog-x" data-amx-dlg="cancel" title="Tutup">✕</button>' +
+        "</div>" +
+        '<div class="amx-dialog-body">' +
+        '<p class="amx-dialog-msg"></p>' +
+        (kind === "prompt"
+          ? '<input type="text" class="amx-dialog-input" autocomplete="off" spellcheck="false">'
+          : "") +
+        "</div>" +
+        '<div class="amx-dialog-foot">' +
+        (kind !== "alert"
+          ? '<button type="button" class="btn btn-ghost amx-sm" data-amx-dlg="cancel"></button>'
+          : "") +
+        '<button type="button" class="btn btn-primary amx-sm" data-amx-dlg="ok"></button>' +
+        "</div>" +
+        "</div>";
+      overlay.querySelector(".amx-dialog-title").textContent = title;
+      overlay.querySelector(".amx-dialog-msg").textContent = message;
+      var input = overlay.querySelector(".amx-dialog-input");
+      if (input) input.value = def;
+      var okBtn = overlay.querySelector('[data-amx-dlg="ok"]');
+      okBtn.textContent = okLabel;
+      var cancelBtns = overlay.querySelectorAll('[data-amx-dlg="cancel"]');
+      cancelBtns.forEach(function (b) {
+        if (b.classList.contains("amx-dialog-x")) return;
+        b.textContent = cancelLabel;
+      });
+      function finish(val) {
+        try {
+          overlay.remove();
+        } catch (e) {}
+        resolve(val);
+      }
+      okBtn.addEventListener("click", function () {
+        if (kind === "prompt") finish(input ? input.value : "");
+        else if (kind === "confirm") finish(true);
+        else finish(true);
+      });
+      cancelBtns.forEach(function (b) {
+        b.addEventListener("click", function () {
+          if (kind === "confirm") finish(false);
+          else if (kind === "prompt") finish(null);
+          else finish(false);
+        });
+      });
+      overlay.addEventListener("click", function (ev) {
+        if (ev.target === overlay) {
+          if (kind === "confirm") finish(false);
+          else if (kind === "prompt") finish(null);
+          else finish(true);
+        }
+      });
+      overlay.addEventListener("keydown", function (ev) {
+        if (ev.key === "Escape") {
+          ev.preventDefault();
+          if (kind === "confirm") finish(false);
+          else if (kind === "prompt") finish(null);
+          else finish(true);
+        } else if (ev.key === "Enter" && kind === "prompt") {
+          ev.preventDefault();
+          finish(input ? input.value : "");
+        }
+      });
+      root.appendChild(overlay);
+      setTimeout(function () {
+        if (input) {
+          input.focus();
+          input.select();
+        } else okBtn.focus();
+      }, 30);
+    });
+  }
+
+  function amxPrompt(message, def, title) {
+    return amxDialog({
+      kind: "prompt",
+      title: title || "Input",
+      message: message,
+      defaultValue: def || "",
+      okLabel: "OK",
+      cancelLabel: "Batal",
+    });
+  }
+
+  function amxConfirm(message, title) {
+    return amxDialog({
+      kind: "confirm",
+      title: title || "Konfirmasi",
+      message: message,
+      okLabel: "Ya",
+      cancelLabel: "Batal",
+    });
+  }
+
+  function amxAlert(message, title) {
+    return amxDialog({
+      kind: "alert",
+      title: title || "Info",
+      message: message,
+      okLabel: "OK",
+    });
+  }
+
   function open(opts) {
     opts = opts || {};
     var onExport = opts.onExport || null;
@@ -2211,7 +2333,11 @@
         var blob = encodeMp3(rendered, 128);
         var name = "mix-" + Date.now();
         try {
-          var asked = window.prompt("Nama file MP3 (tanpa ekstensi):", name);
+          var asked = await amxPrompt(
+            "Nama file MP3 (tanpa ekstensi):",
+            name,
+            "Unduh MP3"
+          );
           if (asked == null) {
             setStatus("Unduh MP3 dibatalkan.");
             return;
@@ -2551,11 +2677,13 @@
         else startRec();
       } else if (amx === "stop-rec") stopRec();
       else if (amx === "yt-add") {
-        var u = window.prompt(
-          "Tempel link YouTube (karaoke / backing track):\nContoh: https://www.youtube.com/watch?v=…",
-          ""
-        );
-        if (u) addYouTubeTrack(u);
+        amxPrompt(
+          "Tempel link YouTube (karaoke / backing track).\nContoh: https://www.youtube.com/watch?v=…",
+          "",
+          "Sematkan YouTube"
+        ).then(function (u) {
+          if (u && String(u).trim()) addYouTubeTrack(String(u).trim());
+        });
       } else if (amx === "yt-remove") {
         tracks = tracks.filter(function (t) { return t.type !== "youtube"; });
         destroyYtPlayer();

@@ -1097,3 +1097,366 @@ input.amx-off-input{
   background:rgba(80,20,30,.25)!important;
 }
 .amx-yt-row-hint{margin:4px 0 0;font-size:10px}
+
+
+
+/* ========== v6: custom UI + compact layout ========== */
+
+/* Scrollbars (Firefox + Chromium) */
+.amx-root,
+.amx-panel,
+.amx-tracks,
+.amx-dialog-body {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(94,200,255,.45) rgba(0,0,0,.25);
+}
+.amx-root::-webkit-scrollbar,
+.amx-panel::-webkit-scrollbar,
+.amx-tracks::-webkit-scrollbar,
+.amx-dialog-body::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.amx-root::-webkit-scrollbar-track,
+.amx-panel::-webkit-scrollbar-track,
+.amx-tracks::-webkit-scrollbar-track,
+.amx-dialog-body::-webkit-scrollbar-track {
+  background: rgba(0,0,0,.22);
+  border-radius: 8px;
+}
+.amx-root::-webkit-scrollbar-thumb,
+.amx-panel::-webkit-scrollbar-thumb,
+.amx-tracks::-webkit-scrollbar-thumb,
+.amx-dialog-body::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(94,200,255,.55), rgba(59,139,255,.4));
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.amx-root::-webkit-scrollbar-thumb:hover,
+.amx-panel::-webkit-scrollbar-thumb:hover {
+  background: rgba(125,227,255,.7);
+  background-clip: padding-box;
+}
+.amx-root::-webkit-scrollbar-corner { background: transparent; }
+
+/* Panel lebih padat, lebih lebar */
+.amx-panel{
+  width: min(860px, 100%) !important;
+  max-height: min(94vh, 920px) !important;
+  padding: 0 0 8px !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+.amx-head{
+  margin: 0 !important;
+  border-radius: 18px 18px 0 0 !important;
+  flex-shrink: 0;
+}
+.amx-panel > .amx-toolbar,
+.amx-panel > .amx-transport,
+.amx-panel > .amx-region-tools,
+.amx-panel > .amx-scrub-row,
+.amx-panel > .amx-status,
+.amx-panel > .amx-yt-dock,
+.amx-panel > .amx-foot {
+  padding-left: 12px;
+  padding-right: 12px;
+  flex-shrink: 0;
+}
+.amx-tracks{
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  margin: 4px 0 !important;
+  padding: 0 12px !important;
+  max-height: none !important;
+  gap: 4px !important;
+}
+
+/* Toolbar / transport: satu baris horizontal */
+.amx-toolbar{
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  gap: 4px !important;
+  margin: 6px 0 4px !important;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+.amx-transport{
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  gap: 3px !important;
+  margin: 2px 0 4px !important;
+  overflow-x: auto;
+}
+.amx-region-tools{
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  gap: 4px !important;
+  margin: 2px 0 4px !important;
+  overflow-x: auto;
+}
+.amx-foot{
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 4px !important;
+  margin-top: 4px !important;
+  overflow-x: auto;
+}
+
+/* Tombol lebih compact */
+.amx-root .btn,
+.amx-panel .btn {
+  min-height: 28px !important;
+  padding: 0 8px !important;
+  font-size: 11px !important;
+  border-radius: 8px !important;
+}
+.amx-root .amx-sm { min-height: 26px !important; padding: 0 8px !important; font-size: 10px !important; }
+.amx-root .amx-xs { min-height: 22px !important; padding: 0 6px !important; font-size: 10px !important; }
+.amx-root .amx-nav { width: 30px !important; min-width: 30px !important; min-height: 28px !important; }
+
+/* Inputs & selects custom */
+.amx-root input[type=text],
+.amx-root input[type=number],
+.amx-root input:not([type]),
+.amx-root select,
+.amx-root textarea {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  background: rgba(0,0,0,.4) !important;
+  border: 1px solid rgba(125,227,255,.28) !important;
+  border-radius: 6px !important;
+  color: #d8eef8 !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  padding: 3px 6px !important;
+  outline: none !important;
+  box-shadow: none !important;
+  min-height: 24px;
+}
+.amx-root input[type=text]:focus,
+.amx-root select:focus,
+.amx-root textarea:focus {
+  border-color: #5ec8ff !important;
+  box-shadow: 0 0 0 2px rgba(94,200,255,.22) !important;
+}
+.amx-root select {
+  background-image: linear-gradient(45deg, transparent 50%, #7de3ff 50%),
+    linear-gradient(135deg, #7de3ff 50%, transparent 50%) !important;
+  background-position: calc(100% - 12px) 50%, calc(100% - 7px) 50% !important;
+  background-size: 5px 5px, 5px 5px !important;
+  background-repeat: no-repeat !important;
+  padding-right: 22px !important;
+  cursor: pointer;
+}
+.amx-root select option {
+  background: #121a2b;
+  color: #e8eef7;
+}
+
+/* Range slider fully custom */
+.amx-root input[type=range] {
+  -webkit-appearance: none !important;
+  appearance: none !important;
+  height: 14px !important;
+  background: transparent !important;
+  accent-color: unset !important;
+}
+.amx-root input[type=range]::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 99px;
+  background: rgba(125,227,255,.18);
+  border: 1px solid rgba(125,227,255,.2);
+}
+.amx-root input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none !important;
+  width: 12px; height: 12px;
+  margin-top: -5px;
+  border-radius: 50%;
+  background: #7de3ff;
+  border: 2px solid #0b1524;
+  box-shadow: 0 0 6px rgba(125,227,255,.6);
+  cursor: pointer;
+}
+.amx-root input[type=range]::-moz-range-track {
+  height: 4px;
+  border-radius: 99px;
+  background: rgba(125,227,255,.18);
+  border: 1px solid rgba(125,227,255,.2);
+}
+.amx-root input[type=range]::-moz-range-thumb {
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  background: #7de3ff;
+  border: 2px solid #0b1524;
+  cursor: pointer;
+}
+
+/* Track card compact — kontrol berjajar */
+.amx-track{
+  padding: 6px 8px !important;
+  gap: 4px !important;
+  border-radius: 10px !important;
+}
+.amx-track-hd{
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  gap: 6px !important;
+  margin-bottom: 2px !important;
+}
+.amx-track-name{
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px !important;
+}
+.amx-track-controls,
+.amx-track-sliders,
+.amx-sliders{
+  display: flex !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  gap: 6px 10px !important;
+}
+.amx-slider-lab{
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  font-size: 10px !important;
+  margin: 0 !important;
+  min-width: 0;
+}
+.amx-slider-lab input[type=range]{
+  width: 72px !important;
+  min-width: 56px !important;
+  max-width: 100px !important;
+  flex: 0 1 80px !important;
+}
+.amx-status{
+  font-size: 10px !important;
+  margin: 2px 0 0 !important;
+  padding: 2px 12px !important;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Custom dialog / modal / confirm / prompt */
+.amx-dialog-overlay{
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(4,10,20,.72);
+  backdrop-filter: blur(5px);
+  animation: amxDlgIn .15s ease-out;
+}
+@keyframes amxDlgIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.amx-dialog{
+  width: min(360px, 100%);
+  background: linear-gradient(165deg, #1a2740, #101a2c);
+  border: 1px solid rgba(125,227,255,.28);
+  border-radius: 14px;
+  box-shadow: 0 20px 50px rgba(0,0,0,.55);
+  padding: 0;
+  overflow: hidden;
+  color: #e8eef7;
+}
+.amx-dialog-head{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: linear-gradient(135deg, rgba(30,60,90,.95), rgba(14,28,42,.98));
+  border-bottom: 1px solid rgba(125,227,255,.18);
+}
+.amx-dialog-title{ font-size: 13px; flex: 1; }
+.amx-dialog-body{ padding: 12px 14px; }
+.amx-dialog-msg{
+  margin: 0 0 10px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #c5d4e6;
+  white-space: pre-wrap;
+}
+.amx-dialog-input{
+  width: 100% !important;
+  box-sizing: border-box;
+  min-height: 32px !important;
+  font-size: 12px !important;
+  padding: 6px 10px !important;
+}
+.amx-dialog-foot{
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 8px 12px 12px;
+}
+.amx-dialog .btn-primary{
+  background: rgba(11,108,240,.35) !important;
+  border-color: rgba(59,139,255,.55) !important;
+  color: #e8f4ff !important;
+}
+
+/* Info / status pill */
+.amx-info-box,
+.amx-panel [data-amx="status"]{
+  background: rgba(0,0,0,.28);
+  border: 1px solid rgba(125,227,255,.14);
+  border-radius: 8px;
+  padding: 4px 8px !important;
+}
+
+/* Master di toolbar lebih ramping */
+.amx-master-lab{
+  background: transparent !important;
+  border: none !important;
+  padding: 0 2px !important;
+  gap: 3px !important;
+}
+.amx-master-lab input[type=range]{
+  width: 64px !important;
+  max-width: 18vw !important;
+}
+
+/* Light theme dialogs */
+[data-theme="light"] .amx-dialog{
+  background: linear-gradient(165deg, #f4f9fd, #e8f2fa);
+  border-color: rgba(26,143,209,.3);
+  color: #0c3d5c;
+}
+[data-theme="light"] .amx-dialog-head{
+  background: linear-gradient(135deg, #e8f4fc, #d6ecfa);
+  border-bottom-color: rgba(26,143,209,.2);
+}
+[data-theme="light"] .amx-dialog-msg{ color: #3a5a72; }
+[data-theme="light"] .amx-dialog-overlay{ background: rgba(20,40,60,.45); }
+
+/* YT dock compact */
+.amx-yt-dock{ margin: 4px 12px !important; padding: 6px !important; }
+.amx-yt-frame-wrap{ max-height: 160px !important; }
+
+@media (max-width: 520px) {
+  .amx-toolbar, .amx-transport, .amx-region-tools, .amx-foot {
+    flex-wrap: wrap !important;
+  }
+  .amx-panel{ width: 100% !important; }
+}
