@@ -130,10 +130,57 @@
     return out;
   }
 
-  /** Encode AudioBuffer → MP3 via lamejs (vendor/lame.min.js) */
+  var _lamePromise = null;
+  /** Muat lamejs: lokal → CDN (sekali saja) */
+  function ensureLamejs() {
+    if (typeof lamejs !== "undefined" && lamejs.Mp3Encoder) {
+      return Promise.resolve(lamejs);
+    }
+    if (_lamePromise) return _lamePromise;
+    var urls = [
+      "js/vendor/lame.min.js",
+      "/js/vendor/lame.min.js",
+      "https://cdnjs.cloudflare.com/ajax/libs/lamejs/1.2.0/lame.min.js",
+      "https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js",
+    ];
+    _lamePromise = new Promise(function (resolve, reject) {
+      var i = 0;
+      function tryNext() {
+        if (typeof lamejs !== "undefined" && lamejs.Mp3Encoder) {
+          resolve(lamejs);
+          return;
+        }
+        if (i >= urls.length) {
+          _lamePromise = null;
+          reject(
+            new Error(
+              "lamejs gagal dimuat. Cek koneksi atau taruh js/vendor/lame.min.js"
+            )
+          );
+          return;
+        }
+        var url = urls[i++];
+        var s = document.createElement("script");
+        s.src = url;
+        s.async = true;
+        s.onload = function () {
+          if (typeof lamejs !== "undefined" && lamejs.Mp3Encoder) resolve(lamejs);
+          else tryNext();
+        };
+        s.onerror = function () {
+          tryNext();
+        };
+        document.head.appendChild(s);
+      }
+      tryNext();
+    });
+    return _lamePromise;
+  }
+
+  /** Encode AudioBuffer → MP3 via lamejs (vendor atau CDN) */
   function encodeMp3(audioBuffer, kbps) {
     if (typeof lamejs === "undefined" || !lamejs.Mp3Encoder) {
-      throw new Error("lamejs belum dimuat — muat js/vendor/lame.min.js");
+      throw new Error("lamejs belum dimuat");
     }
     kbps = kbps || 128;
     var numCh = audioBuffer.numberOfChannels >= 2 ? 2 : 1;
@@ -2334,7 +2381,9 @@
         maxSec: CHAT_MAX_SEC,
       });
       if (!rendered) return null;
-      setStatus("Encode MP3 chat (offline, cepat)…");
+      setStatus("Menyiapkan encoder MP3…");
+      await ensureLamejs();
+      setStatus("Encode MP3 showcase (offline)…");
       var blob = encodeMp3(rendered, CHAT_KBPS);
       return {
         blob: blob,
@@ -2402,6 +2451,8 @@
 
     async function doDownloadMp3() {
       try {
+        setStatus("Menyiapkan encoder MP3…");
+        await ensureLamejs();
         var rendered = await mixToBuffer();
         if (!rendered) return;
         setStatus("Encode MP3…");
@@ -2445,7 +2496,7 @@
             fmt(result.duration) +
             " · " +
             Math.round(result.blob.size / 1024) +
-            " KB (kompres; MP3 butuh library ekstra)"
+            " KB (WebM/Opus)"
         );
       } catch (e) {
         setStatus("Gagal simpan WebM: " + (e.message || e));
@@ -2458,7 +2509,7 @@
         return;
       }
       try {
-        setStatus("Mix region → MP3 mono 48kbps (offline)…");
+        setStatus("Mix → MP3 mono untuk showcase…");
         var result = await mixToChatBlob();
         if (!result) return;
         if (result.blob.size < 400) {
@@ -2481,8 +2532,9 @@
             " KB · " +
             fmt(result.duration)
         );
-        await onExport(result);
-        setStatus("Terkirim.");
+        // onExport(blob, meta) — kompatibel callback lama yang hanya terima blob
+        await onExport(result.blob, result);
+        setStatus("Siap showcase · " + Math.round(result.blob.size / 1024) + " KB");
         close();
       } catch (e) {
         var msg = (e && e.message) || String(e);
@@ -3467,6 +3519,7 @@
 
     renderTracks();
     ensureAmxUiCss();
+    try { ensureLamejs(); } catch (e) {}
     root.classList.add("is-open");
     setStatus("Siap · max " + MAX_TRACKS + " · vol/reverb per track · geser judul.");
   }

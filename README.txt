@@ -1,22 +1,26 @@
-Silverhawk Mixer — patch v8
-===========================
-js/audio-mixer.js
-css/audio-mixer-amx.css
-studio.html
+Silverhawk Mixer — patch v9 (MP3 / export)
+==========================================
+Salin ke root repo ayahelang/mixer:
 
-Perbaikan fokus
----------------
-1. Tombol ▶ YT → modal input link muncul di TENGAH layar
-   (position:fixed ke document.body, z-index sangat tinggi)
-   Sebelumnya overlay ikut flex root sehingga panel bergeser ke kiri
-   dan kotak input tidak terlihat sebagai dialog.
+  js/audio-mixer.js
+  js/vendor/lame.min.js   ← BARU (encoder MP3)
+  css/audio-mixer-amx.css
+  studio.html
 
-2. CSS dialog + scrollbar di-inject juga lewat JS (ensureAmxUiCss)
-   saat panel dibuka — tetap custom meski stylesheet lama ter-cache.
+MP3
+---
+• studio.html memuat js/vendor/lame.min.js
+• Jika belum ada, audio-mixer.js auto-load dari CDN
+• ⬇ MP3 dan Showcase (encode MP3) menunggu encoder siap
 
-3. Scrollbar custom dipaksa di .amx-root / .amx-panel / .amx-tracks
-   (WebKit + Firefox).
+WAV / WebM
+----------
+• Tidak butuh lamejs (WAV = buffer encode; WebM = MediaRecorder)
+• Tetap jalan meski offline tanpa CDN
 
-Cara uji YT
------------
-Klik ▶ YT → modal "Sematkan YouTube" → tempel link → OK.
+Showcase
+--------
+• Tombol Showcase → mix region → MP3 mono → onExport(blob, meta)
+• Callback studio kompatibel blob.size
+
+Hard refresh setelah deploy (Ctrl+Shift+R).
