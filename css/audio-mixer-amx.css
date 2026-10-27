@@ -1684,3 +1684,24 @@ input.amx-region-time{
   overflow-y:auto!important;
   overflow-x:hidden!important;
 }
+
+
+/* YT capture audio for export */
+.amx-yt-capture{
+  background:rgba(255,80,100,.18)!important;
+  border-color:rgba(255,100,120,.5)!important;
+  color:#ffb0ba!important;
+  font-weight:800!important;
+  white-space:nowrap;
+}
+.amx-yt-capture:hover{
+  background:rgba(255,80,100,.3)!important;
+  color:#fff!important;
+}
+.amx-yt-hint{
+  display:block!important;
+  font-size:10px!important;
+  margin:4px 0 6px!important;
+  line-height:1.35;
+}
+.amx-yt-head{flex-wrap:wrap}

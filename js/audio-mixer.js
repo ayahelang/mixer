@@ -584,9 +584,10 @@
       '  <div class="amx-yt-dock" data-amx="ytdock" hidden>' +
       '    <div class="amx-yt-head">' +
       '      <span class="amx-yt-title" data-amx="yttitle">YouTube</span>' +
-      '      <span class="muted amx-yt-hint">Guide / karaoke · audio YT tidak ikut export mix (rekam vokal terpisah)</span>' +
+      '      <button type="button" class="btn amx-xs amx-yt-capture" data-amx="yt-capture" title="Rekam audio tab/sistem saat video diputar — hasil jadi track yang ikut export">⏺ Ambil audio YT</button>' +
       '      <button type="button" class="btn btn-ghost amx-xs" data-amx="yt-remove" title="Lepas video YouTube">✕</button>' +
       "    </div>" +
+      '    <p class="muted amx-yt-hint">Video = guide lirik. Agar ikut <b>export</b>: klik ⏺ Ambil audio YT (bagikan tab ini + centang audio), lalu rekam vokal.</p>' +
       '    <div class="amx-yt-frame-wrap"><div id="amxYtPlayer" class="amx-yt-player"></div></div>' +
       "  </div>" +
       '  <div class="amx-transport">' +
@@ -1054,6 +1055,195 @@
           setStatus("YouTube API: " + ((e && e.message) || e));
         });
     }
+
+    var ytCapturing = false;
+
+    /**
+     * Browser tidak mengizinkan baca PCM dari iframe YouTube (CORS).
+     * Cara yang viable: getDisplayMedia — user bagikan tab + audio,
+     * kita rekam sambil YT diputar, decode jadi AudioBuffer → ikut mix/export.
+     */
+    async function captureYtAudioToTrack() {
+      if (ytCapturing) {
+        setStatus("Sedang mengambil audio YT…");
+        return;
+      }
+      if (ytTrackIdx < 0 || !tracks[ytTrackIdx] || tracks[ytTrackIdx].type !== "youtube") {
+        setStatus("Sematkan video YT dulu.");
+        return;
+      }
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+        setStatus("Browser tidak mendukung capture tab audio.");
+        return;
+      }
+      var tr = tracks[ytTrackIdx];
+      var off = tr.offset || 0;
+      var targetDur = tr.ytDuration || 0;
+      if (targetDur < 1 && ytPlayer && ytReady) {
+        try {
+          targetDur = ytPlayer.getDuration() || 0;
+          tr.ytDuration = targetDur;
+        } catch (e) {}
+      }
+      if (targetDur < 1) targetDur = 180; // fallback 3 menit
+
+      var ok = await amxConfirm(
+        "Agar audio YouTube ikut di-export, browser harus merekam audio tab.\\n\\n" +
+          "1) Di dialog berikutnya: pilih tab ini (atau jendela)\\n" +
+          "2) Centang \"Bagikan audio tab\" / Share tab audio\\n" +
+          "3) Video YT akan diputar dari awal sambil direkam\\n\\n" +
+          "Lanjut?",
+        "Ambil audio YouTube"
+      );
+      if (!ok) return;
+
+      var stream = null;
+      try {
+        setStatus("Pilih tab + centang audio…");
+        var opts = {
+          video: {
+            displaySurface: "browser",
+          },
+          audio: {
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: false,
+          },
+          preferCurrentTab: true,
+          selfBrowserSurface: "include",
+          systemAudio: "include",
+        };
+        try {
+          stream = await navigator.mediaDevices.getDisplayMedia(opts);
+        } catch (e1) {
+          // Safari / Firefox partial support
+          stream = await navigator.mediaDevices.getDisplayMedia({
+            video: true,
+            audio: true,
+          });
+        }
+      } catch (e) {
+        setStatus(
+          "Capture dibatalkan / ditolak: " + ((e && e.message) || e)
+        );
+        return;
+      }
+
+      var audioTracks = stream.getAudioTracks();
+      if (!audioTracks.length) {
+        try {
+          stream.getTracks().forEach(function (t) {
+            t.stop();
+          });
+        } catch (e) {}
+        setStatus(
+          "Tidak ada audio di share. Ulangi dan centang \"Bagikan audio tab\"."
+        );
+        return;
+      }
+
+      ytCapturing = true;
+      var chunks = [];
+      var mime = "";
+      try {
+        if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus"))
+          mime = "audio/webm;codecs=opus";
+        else if (MediaRecorder.isTypeSupported("audio/webm")) mime = "audio/webm";
+      } catch (e) {}
+
+      var recStream = new MediaStream(audioTracks);
+      var rec = mime
+        ? new MediaRecorder(recStream, {
+            mimeType: mime,
+            audioBitsPerSecond: 192000,
+          })
+        : new MediaRecorder(recStream);
+      rec.ondataavailable = function (ev) {
+        if (ev.data && ev.data.size) chunks.push(ev.data);
+      };
+
+      var stopped = false;
+      function cleanupStream() {
+        try {
+          stream.getTracks().forEach(function (t) {
+            t.stop();
+          });
+        } catch (e) {}
+      }
+
+      try {
+        // Putar YT dari awal
+        if (ytPlayer && ytReady) {
+          try {
+            ytPlayer.seekTo(0, true);
+            ytPlayer.playVideo();
+          } catch (e) {}
+        }
+        playhead = off;
+        rec.start(250);
+        setStatus(
+          "Merekam audio YT… " +
+            fmt(targetDur) +
+            " — jangan pindah tab sumber audio"
+        );
+
+        await new Promise(function (resolve) {
+          var maxMs = Math.ceil(targetDur * 1000) + 800;
+          var timer = setTimeout(function () {
+            if (!stopped) {
+              stopped = true;
+              try {
+                if (rec.state !== "inactive") rec.stop();
+              } catch (e) {}
+            }
+          }, maxMs);
+          rec.onstop = function () {
+            clearTimeout(timer);
+            resolve();
+          };
+          stream.getVideoTracks().forEach(function (vt) {
+            vt.addEventListener("ended", function () {
+              if (!stopped) {
+                stopped = true;
+                try {
+                  if (rec.state !== "inactive") rec.stop();
+                } catch (e) {}
+              }
+            });
+          });
+        });
+
+        try {
+          if (ytPlayer && ytReady) ytPlayer.pauseVideo();
+        } catch (e) {}
+        cleanupStream();
+
+        if (!chunks.length) {
+          setStatus("Tidak ada data audio tertangkap.");
+          ytCapturing = false;
+          return;
+        }
+
+        setStatus("Decode audio YT…");
+        var blob = new Blob(chunks, { type: mime || "audio/webm" });
+        var buf = await decodeBlob(ensureCtx(), blob);
+        var name =
+          (tr.name ? String(tr.name).slice(0, 40) : "YouTube") + " (audio)";
+        var okAdd = addBuffer(buf, name, off);
+        if (okAdd) {
+          setStatus(
+            "Audio YT jadi track · ikut mix/export. Video tetap guide lirik."
+          );
+        } else {
+          setStatus("Gagal menambah track (mungkin penuh).");
+        }
+      } catch (e) {
+        cleanupStream();
+        setStatus("Gagal ambil audio YT: " + ((e && e.message) || e));
+      }
+      ytCapturing = false;
+    }
+
 
     function anySolo() {
       for (var i = 0; i < tracks.length; i++) {
@@ -1774,7 +1964,7 @@
             '<button type="button" class="btn btn-ghost amx-xs" data-act="mute" data-i="' + idx + '" title="Mute/unmute guide">M</button>' +
             '<button type="button" class="btn btn-ghost amx-xs" data-act="del" data-i="' + idx + '" title="Hapus">×</button>' +
             "</div></div>" +
-            '<p class="muted amx-yt-row-hint">Video di panel atas · sinkron transport · tidak masuk export mix</p>';
+            '<p class="muted amx-yt-row-hint">Guide video · klik <b>Ambil audio YT</b> agar audio ikut export</p>';
           listEl.appendChild(row);
           return;
         }
@@ -2820,6 +3010,11 @@
         renderTracks();
         updateTransportUI();
         setStatus("YouTube dilepas.");
+      } else if (amx === "yt-capture") {
+        if (ev && ev.preventDefault) ev.preventDefault();
+        if (ev && ev.stopPropagation) ev.stopPropagation();
+        captureYtAudioToTrack();
+        return;
       }
       else if (amx === "play") playAll();
       else if (amx === "stop") {
